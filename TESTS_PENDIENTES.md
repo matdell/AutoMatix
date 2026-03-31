@@ -12,3 +12,12 @@
 - API: crear/editar PDV con nuevos campos de direccion y shopping (POST/PATCH /merchants/:id/branches).
 - Import: CSV con columnas legacy crea Marca + RS + PDV y vinculos (POST /merchants/import).
 - Import: nro de establecimiento se persiste en BranchEstablishment (CardNetwork=OTRA).
+
+## Arquitectura central (futuro)
+- Sync: GET /sync/batch firma valida y payload inalterado.
+- Sync: POST /sync/ack idempotente por batchId.
+- Sync: cursor incremental por entidad no salta ni duplica registros.
+- Sync: BankSubscription filtra solo entidades autorizadas.
+- Replicas: solo permite overrides operativos (isActive, operationalStatus, etc).
+- Auth: tokens locales sin tenantId en instancia bancaria.
+- Seguridad: mTLS requerido en endpoints de sync.

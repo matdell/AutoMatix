@@ -44,16 +44,19 @@ npm run dev
 - API: `http://localhost:3001/api`
 - Web: `http://localhost:3000`
 
-## VPS (dev-bank.hollywoodsoft.com)
+## VPS (automatixpay.com PoC)
 - Host: `matias@74.208.218.120`
 - OS/Arch: Ubuntu 24.04.4 LTS (x86_64)
 - Path del proyecto: `/home/matias/dev-bank`
-- Dominio web: `https://dev-bank.hollywoodsoft.com`
-- Dominio API: `https://dev-bank.hollywoodsoft.com/api`
+- Dominio web banco: `https://bank1.automatixpay.com`
+- Dominio API banco: `https://bank1.automatixpay.com/api`
+- Dominio central: `https://dev.automatixpay.com`
 - PM2 API: `dev-bank-api` (Node, `apps/api/dist/main.js`, puerto 3001)
 - PM2 Web: `dev-bank-web` (Next `start -p 3000`)
-- Nginx `/` -> `127.0.0.1:3000`
-- Nginx `/api` -> `127.0.0.1:3001`
+- PM2 Central: `dev-bank-central` (Node, `apps/central-api/src/server.js`, puerto 4001)
+- Nginx banco `/` -> `127.0.0.1:3000`
+- Nginx banco `/api` -> `127.0.0.1:3001`
+- Nginx central `/` -> `127.0.0.1:4001`
 - Postgres Docker: `dev-bank-postgres` en `5432`
 
 Comandos utiles:
@@ -71,6 +74,9 @@ docker ps
 - Todas las entidades relevantes incluyen `tenantId`.
 - Los JWT incluyen `tenantId` y `role`.
 - Las consultas se filtran por tenant en cada servicio.
+
+## Arquitectura objetivo (diseno)
+- Ver `docs/ARCHITECTURE_CENTRAL_BANK.md`.
 
 ## Endpoints principales (API)
 - Auth
