@@ -8,10 +8,15 @@ import { useRouter } from 'next/navigation';
 type Bank = {
   id: string;
   nombre: string;
+  nombreCompleto?: string | null;
+  razonSocial?: string | null;
+  cuit?: string | null;
+  direccionCasaMatriz?: string | null;
   slug: string;
   activo?: boolean;
   paymentMethods?: string[];
   bines?: string[];
+  fechaAlta?: string | null;
   createdAt: string;
 };
 
@@ -85,6 +90,11 @@ export default function SuperAdminBanksPage() {
 
   const [bankNombre, setBankNombre] = useState('');
   const [bankSlug, setBankSlug] = useState('');
+  const [bankNombreCompleto, setBankNombreCompleto] = useState('');
+  const [bankRazonSocial, setBankRazonSocial] = useState('');
+  const [bankCuit, setBankCuit] = useState('');
+  const [bankDireccionCasaMatriz, setBankDireccionCasaMatriz] = useState('');
+  const [bankFechaAlta, setBankFechaAlta] = useState('');
   const [bankPayments, setBankPayments] = useState('');
   const [bankBines, setBankBines] = useState('');
   const [adminNombre, setAdminNombre] = useState('');
@@ -97,6 +107,11 @@ export default function SuperAdminBanksPage() {
   const [editingBank, setEditingBank] = useState<Bank | null>(null);
   const [editNombre, setEditNombre] = useState('');
   const [editSlug, setEditSlug] = useState('');
+  const [editNombreCompleto, setEditNombreCompleto] = useState('');
+  const [editRazonSocial, setEditRazonSocial] = useState('');
+  const [editCuit, setEditCuit] = useState('');
+  const [editDireccionCasaMatriz, setEditDireccionCasaMatriz] = useState('');
+  const [editFechaAlta, setEditFechaAlta] = useState('');
   const [editPayments, setEditPayments] = useState('');
   const [editBines, setEditBines] = useState('');
   const [selectedBankIds, setSelectedBankIds] = useState<string[]>([]);
@@ -138,6 +153,8 @@ export default function SuperAdminBanksPage() {
       .split(',')
       .map((entry) => entry.trim())
       .filter(Boolean);
+
+  const formatDateInput = (value?: string | null) => (value ? value.slice(0, 10) : '');
 
   const toggleSelectBank = (bankId: string) => {
     setSelectedBankIds((prev) =>
@@ -208,6 +225,11 @@ export default function SuperAdminBanksPage() {
       const payload = {
         nombre: bankNombre.trim(),
         slug: bankSlug.trim(),
+        nombreCompleto: bankNombreCompleto.trim() || undefined,
+        razonSocial: bankRazonSocial.trim() || undefined,
+        cuit: bankCuit.trim() || undefined,
+        direccionCasaMatriz: bankDireccionCasaMatriz.trim() || undefined,
+        fechaAlta: bankFechaAlta || undefined,
         paymentMethods: parseList(bankPayments),
         bines: parseList(bankBines),
         adminNombre: adminNombre.trim(),
@@ -221,6 +243,11 @@ export default function SuperAdminBanksPage() {
       setSuccess(`Banco creado: ${created.nombre} (${created.slug}). Admin: ${created.admin?.email || '-'}`);
       setBankNombre('');
       setBankSlug('');
+      setBankNombreCompleto('');
+      setBankRazonSocial('');
+      setBankCuit('');
+      setBankDireccionCasaMatriz('');
+      setBankFechaAlta('');
       setBankPayments('');
       setBankBines('');
       setAdminNombre('');
@@ -239,6 +266,11 @@ export default function SuperAdminBanksPage() {
     setEditingBank(bank);
     setEditNombre(bank.nombre || '');
     setEditSlug(bank.slug || '');
+    setEditNombreCompleto(bank.nombreCompleto ?? '');
+    setEditRazonSocial(bank.razonSocial ?? '');
+    setEditCuit(bank.cuit ?? '');
+    setEditDireccionCasaMatriz(bank.direccionCasaMatriz ?? '');
+    setEditFechaAlta(formatDateInput(bank.fechaAlta));
     setEditPayments((bank.paymentMethods ?? []).join(', '));
     setEditBines((bank.bines ?? []).join(', '));
     setShowEditBankModal(true);
@@ -254,6 +286,11 @@ export default function SuperAdminBanksPage() {
       const payload = {
         nombre: editNombre.trim(),
         slug: editSlug.trim(),
+        nombreCompleto: editNombreCompleto.trim() || undefined,
+        razonSocial: editRazonSocial.trim() || undefined,
+        cuit: editCuit.trim() || undefined,
+        direccionCasaMatriz: editDireccionCasaMatriz.trim() || undefined,
+        fechaAlta: editFechaAlta || undefined,
         paymentMethods: parseList(editPayments),
         bines: parseList(editBines),
       };
@@ -483,6 +520,9 @@ export default function SuperAdminBanksPage() {
     [],
   );
 
+  const formatDisplayDate = (value?: string | null) =>
+    value ? dateFormatter.format(new Date(value)) : '-';
+
   return (
     <AppShell>
       <header className="fixed top-0 left-[var(--sidebar-width)] right-0 h-16 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/15 flex items-center justify-between px-8 shadow-[0px_12px_32px_rgba(42,52,57,0.06)] font-['Inter'] antialiased tracking-tight">
@@ -618,6 +658,9 @@ export default function SuperAdminBanksPage() {
                         Creado
                       </th>
                       <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                        Fecha alta
+                      </th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
                         Estado
                       </th>
                       <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-right">
@@ -631,14 +674,14 @@ export default function SuperAdminBanksPage() {
                   <tbody className="divide-y divide-slate-50">
                     {loadingBanks ? (
                       <tr>
-                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={8}>
+                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={9}>
                           Cargando bancos...
                         </td>
                       </tr>
                     ) : null}
                     {loadingBanks === false && paginatedBanks.length === 0 ? (
                       <tr>
-                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={8}>
+                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={9}>
                           No hay bancos para este filtro.
                         </td>
                       </tr>
@@ -688,11 +731,23 @@ export default function SuperAdminBanksPage() {
                             </td>
                             <td className="px-6 py-4">
                               <div className="text-sm text-on-surface font-semibold">{bank.nombre}</div>
-                              <div className="text-xs text-on-surface-variant">{bank.id.slice(0, 8)}</div>
+                              {bank.nombreCompleto ? (
+                                <div className="text-xs text-on-surface-variant">{bank.nombreCompleto}</div>
+                              ) : null}
+                              {bank.razonSocial || bank.cuit ? (
+                                <div className="text-xs text-on-surface-variant">
+                                  {bank.razonSocial ? `RS ${bank.razonSocial}` : null}
+                                  {bank.razonSocial && bank.cuit ? ' • ' : null}
+                                  {bank.cuit ? `CUIT ${bank.cuit}` : null}
+                                </div>
+                              ) : null}
                             </td>
                             <td className="px-6 py-4 text-sm text-on-surface-variant">{bank.slug}</td>
                             <td className="px-6 py-4 text-sm text-on-surface-variant">
                               {dateFormatter.format(new Date(bank.createdAt))}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-on-surface-variant">
+                              {formatDisplayDate(bank.fechaAlta)}
                             </td>
                             <td className="px-6 py-4">
                               <span
@@ -742,7 +797,7 @@ export default function SuperAdminBanksPage() {
                           </tr>
                           {expanded ? (
                             <tr key={`${bank.id}-branches`}>
-                              <td colSpan={8} className="px-6 pb-6">
+                              <td colSpan={9} className="px-6 pb-6">
                                 <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-4">
                                   <div className="flex items-center justify-between mb-4">
                                     <h3 className="text-sm font-semibold text-slate-900">Sucursales</h3>
@@ -871,7 +926,63 @@ export default function SuperAdminBanksPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Medios de pago</label>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Nombre completo
+              </label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={bankNombreCompleto}
+                onChange={(event) => setBankNombreCompleto(event.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Razon social
+              </label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={bankRazonSocial}
+                onChange={(event) => setBankRazonSocial(event.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">CUIT</label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={bankCuit}
+                onChange={(event) => setBankCuit(event.target.value)}
+                placeholder="30-12345678-9"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Fecha de alta
+              </label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                type="date"
+                value={bankFechaAlta}
+                onChange={(event) => setBankFechaAlta(event.target.value)}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+              Direccion casa matriz
+            </label>
+            <input
+              className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+              value={bankDireccionCasaMatriz}
+              onChange={(event) => setBankDireccionCasaMatriz(event.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Tarjetas activas
+              </label>
               <input
                 className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
                 value={bankPayments}
@@ -961,7 +1072,63 @@ export default function SuperAdminBanksPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Medios de pago</label>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Nombre completo
+              </label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={editNombreCompleto}
+                onChange={(event) => setEditNombreCompleto(event.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Razon social
+              </label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={editRazonSocial}
+                onChange={(event) => setEditRazonSocial(event.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">CUIT</label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={editCuit}
+                onChange={(event) => setEditCuit(event.target.value)}
+                placeholder="30-12345678-9"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Fecha de alta
+              </label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                type="date"
+                value={editFechaAlta}
+                onChange={(event) => setEditFechaAlta(event.target.value)}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+              Direccion casa matriz
+            </label>
+            <input
+              className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+              value={editDireccionCasaMatriz}
+              onChange={(event) => setEditDireccionCasaMatriz(event.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Tarjetas activas
+              </label>
               <input
                 className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
                 value={editPayments}
@@ -1019,7 +1186,9 @@ export default function SuperAdminBanksPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Medios de pago</label>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Tarjetas activas
+              </label>
               <input
                 className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
                 value={bulkPayments}

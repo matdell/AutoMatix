@@ -1,9 +1,25 @@
-import { ArrayMaxSize, IsArray, IsBoolean, IsOptional, IsString } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsOptional, IsString } from 'class-validator';
 
 export class UpdateBankSuperadminDto {
   @IsOptional()
   @IsString()
   nombre?: string;
+
+  @IsOptional()
+  @IsString()
+  nombreCompleto?: string;
+
+  @IsOptional()
+  @IsString()
+  razonSocial?: string;
+
+  @IsOptional()
+  @IsString()
+  cuit?: string;
+
+  @IsOptional()
+  @IsString()
+  direccionCasaMatriz?: string;
 
   @IsOptional()
   @IsString()
@@ -18,6 +34,10 @@ export class UpdateBankSuperadminDto {
   @IsArray()
   @ArrayMaxSize(20)
   bines?: string[];
+
+  @IsOptional()
+  @IsDateString()
+  fechaAlta?: string;
 
   @IsOptional()
   @IsString()

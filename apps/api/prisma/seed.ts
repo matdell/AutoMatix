@@ -11,6 +11,11 @@ async function main() {
   const banco = await prisma.bank.create({
     data: {
       nombre: 'Banco Andino',
+      nombreCompleto: 'Banco Andino S.A.',
+      razonSocial: 'Banco Andino S.A.',
+      cuit: '30-70123456-7',
+      direccionCasaMatriz: 'Av. Santa Fe 1234, CABA',
+      fechaAlta: new Date('2001-05-14'),
       slug: 'banco-andino',
       paymentMethods: ['Visa', 'Mastercard', 'Amex'],
       bines: ['456789', '554433'],
@@ -20,6 +25,11 @@ async function main() {
   const bancoDos = await prisma.bank.create({
     data: {
       nombre: 'Banco del Plata',
+      nombreCompleto: 'Banco del Plata S.A.',
+      razonSocial: 'Banco del Plata S.A.',
+      cuit: '30-70111222-6',
+      direccionCasaMatriz: 'Av. Libertador 850, CABA',
+      fechaAlta: new Date('1998-11-02'),
       slug: 'banco-del-plata',
       paymentMethods: ['Visa', 'Maestro'],
       bines: ['404010'],

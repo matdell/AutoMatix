@@ -70,10 +70,15 @@ enum NotificationType {
 model Bank {
   id             String   @id @default(cuid())
   nombre         String
+  nombreCompleto String?
+  razonSocial    String?
+  cuit           String?
+  direccionCasaMatriz String?
   slug           String   @unique
   logoUrl        String?
   paymentMethods String[]
   bines          String[]
+  fechaAlta      DateTime?
   activo         Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
