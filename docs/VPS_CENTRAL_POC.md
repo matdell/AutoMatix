@@ -32,6 +32,8 @@ Copias locales (este repo, ignorado por git)
 - secrets/mtls/automatixpay/ca.crt
 - secrets/mtls/automatixpay/bank1-client.crt
 - secrets/mtls/automatixpay/bank1-client.key
+- secrets/mtls/automatixpay/bankstaging-client.crt
+- secrets/mtls/automatixpay/bankstaging-client.key
 
 ## Nginx
 - Central exige mTLS solo en /sync/.
@@ -59,3 +61,13 @@ Endpoints en Bank API (requiere JWT de SUPERADMIN o BANK_ADMIN):
   - SYNC_CLIENT_KEY_PATH=/etc/nginx/ssl/automatixpay/bank1-client.key
   - SYNC_CA_CERT_PATH=/etc/nginx/ssl/automatixpay/ca.crt
   - SYNC_HMAC_SECRET=... (mismo valor que central)
+
+## Script de prueba
+`scripts/sync-test.sh`
+
+Ejemplos:
+```bash
+./scripts/sync-test.sh
+MODE=central CENTRAL_BASE_URL=https://staging.automatixpay.com CERT=secrets/mtls/automatixpay/bankstaging-client.crt KEY=secrets/mtls/automatixpay/bankstaging-client.key ./scripts/sync-test.sh
+MODE=bank TOKEN=... BANK_API_BASE=https://bank1.automatixpay.com/api ./scripts/sync-test.sh
+```
