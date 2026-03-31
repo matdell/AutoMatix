@@ -16,6 +16,7 @@ import { AuditModule } from './audit/audit.module';
 import { StorageModule } from './storage/storage.module';
 import { PlacesModule } from './places/places.module';
 import { DocusignModule } from './docusign/docusign.module';
+import { SyncModule } from './sync/sync.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { DocusignModule } from './docusign/docusign.module';
     StorageModule,
     PlacesModule,
     DocusignModule,
+    SyncModule,
   ],
 })
 export class AppModule {}
