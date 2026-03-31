@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { CreateBankDto } from './dto/create-bank.dto';
 import { UpdateBankDto } from './dto/update-bank.dto';
+import { UpdateBankSuperadminDto } from './dto/update-bank-superadmin.dto';
 import bcrypt from 'bcryptjs';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction, Role } from '@prisma/client';
@@ -44,6 +45,9 @@ export class BanksService {
         id: true,
         nombre: true,
         slug: true,
+        activo: true,
+        paymentMethods: true,
+        bines: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
@@ -96,5 +100,88 @@ export class BanksService {
     });
 
     return updated;
+  }
+
+  async updateById(bankId: string, dto: UpdateBankSuperadminDto, actorId?: string) {
+    const before = await this.prisma.bank.findUnique({ where: { id: bankId } });
+    if (!before) {
+      throw new NotFoundException('Banco no encontrado');
+    }
+
+    const updated = await this.prisma.bank.update({
+      where: { id: bankId },
+      data: {
+        nombre: dto.nombre ?? undefined,
+        slug: dto.slug ?? undefined,
+        paymentMethods: dto.paymentMethods ?? undefined,
+        bines: dto.bines ?? undefined,
+        logoUrl: dto.logoUrl ?? undefined,
+        activo: dto.activo ?? undefined,
+      },
+    });
+
+    await this.audit.log({
+      tenantId: bankId,
+      userId: actorId ?? null,
+      action: AuditAction.UPDATE,
+      entity: 'Bank',
+      entityId: bankId,
+      before: {
+        nombre: before.nombre,
+        slug: before.slug,
+        paymentMethods: before.paymentMethods,
+        bines: before.bines,
+        logoUrl: before.logoUrl,
+        activo: before.activo,
+      },
+      after: {
+        nombre: updated.nombre,
+        slug: updated.slug,
+        paymentMethods: updated.paymentMethods,
+        bines: updated.bines,
+        logoUrl: updated.logoUrl,
+        activo: updated.activo,
+      },
+    });
+
+    return updated;
+  }
+
+  async remove(bankId: string, actorId?: string) {
+    const bank = await this.prisma.bank.findUnique({
+      where: { id: bankId },
+      select: { id: true, nombre: true, slug: true },
+    });
+    if (!bank) {
+      throw new NotFoundException('Banco no encontrado');
+    }
+
+    const counts = await this.prisma.bank.findUnique({
+      where: { id: bankId },
+      select: {
+        _count: {
+          select: {
+            users: true,
+            bankBranches: true,
+            merchants: true,
+            branches: true,
+            campaigns: true,
+            invitations: true,
+            validations: true,
+            notifications: true,
+            auditLogs: true,
+          },
+        },
+      },
+    });
+
+    const totalRelations = Object.values(counts?._count ?? {}).reduce((acc, value) => acc + value, 0);
+    if (totalRelations > 0) {
+      throw new BadRequestException('No se puede borrar un banco con datos asociados. Desactivalo primero.');
+    }
+
+    await this.prisma.bank.delete({ where: { id: bankId } });
+
+    return { ok: true };
   }
 }

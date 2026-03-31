@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import AppShell from '@/app/_components/AppShell';
 import { apiJson, getToken } from '@/lib/api';
 import { useRouter } from 'next/navigation';
@@ -9,6 +9,9 @@ type Bank = {
   id: string;
   nombre: string;
   slug: string;
+  activo?: boolean;
+  paymentMethods?: string[];
+  bines?: string[];
   createdAt: string;
 };
 
@@ -28,6 +31,8 @@ type CreatedBank = {
   slug: string;
   admin?: { email?: string };
 };
+
+type BulkStatus = 'keep' | 'active' | 'inactive';
 
 type ModalProps = {
   open: boolean;
@@ -72,6 +77,7 @@ export default function SuperAdminBanksPage() {
   const [page, setPage] = useState(1);
 
   const [showBankModal, setShowBankModal] = useState(false);
+  const [showEditBankModal, setShowEditBankModal] = useState(false);
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [showEditBranchModal, setShowEditBranchModal] = useState(false);
   const [selectedBankId, setSelectedBankId] = useState('');
@@ -84,6 +90,21 @@ export default function SuperAdminBanksPage() {
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [bankSaving, setBankSaving] = useState(false);
+  const [bankUpdating, setBankUpdating] = useState(false);
+  const [bankDeletingId, setBankDeletingId] = useState<string | null>(null);
+  const [bankTogglingId, setBankTogglingId] = useState<string | null>(null);
+  const [editingBank, setEditingBank] = useState<Bank | null>(null);
+  const [editNombre, setEditNombre] = useState('');
+  const [editSlug, setEditSlug] = useState('');
+  const [editPayments, setEditPayments] = useState('');
+  const [editBines, setEditBines] = useState('');
+  const [selectedBankIds, setSelectedBankIds] = useState<string[]>([]);
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false);
+  const [bulkPayments, setBulkPayments] = useState('');
+  const [bulkBines, setBulkBines] = useState('');
+  const [bulkActivo, setBulkActivo] = useState<BulkStatus>('keep');
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
 
   const [branchNombre, setBranchNombre] = useState('');
   const [branchCodigo, setBranchCodigo] = useState('');
@@ -116,6 +137,16 @@ export default function SuperAdminBanksPage() {
       .split(',')
       .map((entry) => entry.trim())
       .filter(Boolean);
+
+  const toggleSelectBank = (bankId: string) => {
+    setSelectedBankIds((prev) =>
+      prev.includes(bankId) ? prev.filter((id) => id !== bankId) : [...prev, bankId],
+    );
+  };
+
+  const clearSelection = () => {
+    setSelectedBankIds([]);
+  };
 
   const loadBanks = async () => {
     setLoadingBanks(true);
@@ -165,6 +196,10 @@ export default function SuperAdminBanksPage() {
     }
   }, [banks.length, page, pageSize]);
 
+  useEffect(() => {
+    setSelectedBankIds((prev) => prev.filter((id) => banks.some((bank) => bank.id === id)));
+  }, [banks]);
+
   const onCreateBank = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
@@ -198,6 +233,123 @@ export default function SuperAdminBanksPage() {
       setError(err instanceof Error ? err.message : 'No se pudo crear el banco');
     } finally {
       setBankSaving(false);
+    }
+  };
+
+  const startEditBank = (bank: Bank) => {
+    setEditingBank(bank);
+    setEditNombre(bank.nombre || '');
+    setEditSlug(bank.slug || '');
+    setEditPayments((bank.paymentMethods ?? []).join(', '));
+    setEditBines((bank.bines ?? []).join(', '));
+    setShowEditBankModal(true);
+  };
+
+  const onUpdateBank = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingBank) return;
+    setError(null);
+    setSuccess(null);
+    setBankUpdating(true);
+    try {
+      const payload = {
+        nombre: editNombre.trim(),
+        slug: editSlug.trim(),
+        paymentMethods: parseList(editPayments),
+        bines: parseList(editBines),
+      };
+      await apiJson(`/banks/${editingBank.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      setSuccess('Banco actualizado correctamente.');
+      setShowEditBankModal(false);
+      setEditingBank(null);
+      await loadBanks();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar el banco');
+    } finally {
+      setBankUpdating(false);
+    }
+  };
+
+  const toggleBankStatus = async (bank: Bank) => {
+    const isActive = bank.activo !== false;
+    const confirmText = isActive
+      ? 'Vas a desactivar este banco. ¿Querés continuar?'
+      : 'Vas a reactivar este banco. ¿Querés continuar?';
+    if (!window.confirm(confirmText)) return;
+    setError(null);
+    setSuccess(null);
+    setBankTogglingId(bank.id);
+    try {
+      await apiJson(`/banks/${bank.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ activo: !isActive }),
+      });
+      setSuccess(isActive ? 'Banco desactivado.' : 'Banco reactivado.');
+      await loadBanks();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar el estado del banco');
+    } finally {
+      setBankTogglingId(null);
+    }
+  };
+
+  const deleteBank = async (bank: Bank) => {
+    if (!window.confirm(`Eliminar ${bank.nombre}? Esta accion no se puede deshacer.`)) return;
+    setError(null);
+    setSuccess(null);
+    setBankDeletingId(bank.id);
+    try {
+      await apiJson(`/banks/${bank.id}`, { method: 'DELETE' });
+      setSuccess('Banco eliminado correctamente.');
+      await loadBanks();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo eliminar el banco');
+    } finally {
+      setBankDeletingId(null);
+    }
+  };
+
+  const onBulkUpdate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (selectedBankIds.length === 0) return;
+    const payload: Record<string, unknown> = {};
+    if (bulkActivo !== 'keep') {
+      payload.activo = bulkActivo === 'active';
+    }
+    if (bulkPayments.trim() !== '') {
+      payload.paymentMethods = parseList(bulkPayments);
+    }
+    if (bulkBines.trim() !== '') {
+      payload.bines = parseList(bulkBines);
+    }
+    if (Object.keys(payload).length === 0) {
+      setError('Completa al menos un campo para aplicar cambios masivos.');
+      return;
+    }
+    setError(null);
+    setSuccess(null);
+    setBulkUpdating(true);
+    try {
+      for (const id of selectedBankIds) {
+        await apiJson(`/banks/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+      }
+      setSuccess(`Cambios aplicados en ${selectedBankIds.length} bancos.`);
+      setShowBulkEditModal(false);
+      setBulkPayments('');
+      setBulkBines('');
+      setBulkActivo('keep');
+      clearSelection();
+      await loadBanks();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudieron aplicar los cambios masivos');
+    } finally {
+      setBulkUpdating(false);
     }
   };
 
@@ -297,6 +449,17 @@ export default function SuperAdminBanksPage() {
 
   const totalPages = Math.max(1, Math.ceil(banks.length / pageSize));
 
+  const bankIdsOnPage = useMemo(() => paginatedBanks.map((bank) => bank.id), [paginatedBanks]);
+  const allOnPageSelected =
+    bankIdsOnPage.length > 0 && bankIdsOnPage.every((id) => selectedBankIds.includes(id));
+  const someOnPageSelected = bankIdsOnPage.some((id) => selectedBankIds.includes(id));
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someOnPageSelected && !allOnPageSelected;
+    }
+  }, [someOnPageSelected, allOnPageSelected]);
+
   const dateFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat('es-AR', {
@@ -368,10 +531,53 @@ export default function SuperAdminBanksPage() {
                 </div>
               </div>
 
+              {selectedBankIds.length > 0 ? (
+                <div className="flex flex-col gap-3 rounded-xl border border-slate-200/70 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm text-slate-700">
+                    <span className="font-semibold">{selectedBankIds.length}</span> bancos seleccionados
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-700 hover:border-slate-300"
+                      onClick={() => setShowBulkEditModal(true)}
+                    >
+                      Editar seleccion
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-700 hover:border-slate-300"
+                      onClick={clearSelection}
+                    >
+                      Limpiar
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-surface-container-low/50">
+                      <th className="px-4 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest w-10">
+                        <input
+                          ref={selectAllRef}
+                          type="checkbox"
+                          className="h-4 w-4 accent-primary"
+                          checked={allOnPageSelected}
+                          onChange={() => {
+                            if (allOnPageSelected) {
+                              setSelectedBankIds((prev) => prev.filter((id) => !bankIdsOnPage.includes(id)));
+                            } else {
+                              setSelectedBankIds((prev) => {
+                                const merged = new Set(prev);
+                                bankIdsOnPage.forEach((id) => merged.add(id));
+                                return Array.from(merged);
+                              });
+                            }
+                          }}
+                        />
+                      </th>
                       <th className="px-4 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest w-10">
                         &nbsp;
                       </th>
@@ -384,22 +590,28 @@ export default function SuperAdminBanksPage() {
                       <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
                         Creado
                       </th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                        Estado
+                      </th>
                       <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-right">
                         Sucursales
+                      </th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-right">
+                        Acciones
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {loadingBanks ? (
                       <tr>
-                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={5}>
+                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={8}>
                           Cargando bancos...
                         </td>
                       </tr>
                     ) : null}
                     {loadingBanks === false && paginatedBanks.length === 0 ? (
                       <tr>
-                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={5}>
+                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={8}>
                           No hay bancos cargados.
                         </td>
                       </tr>
@@ -409,9 +621,24 @@ export default function SuperAdminBanksPage() {
                       const branches = branchCache[bank.id] || [];
                       const isLoadingBranches = branchLoading[bank.id];
                       const hasCachedBranches = Object.prototype.hasOwnProperty.call(branchCache, bank.id);
+                      const isActive = bank.activo !== false;
+                      const isSelected = selectedBankIds.includes(bank.id);
                       return (
                         <>
-                          <tr key={bank.id} className="hover:bg-surface-container-low transition-colors">
+                          <tr
+                            key={bank.id}
+                            className={`hover:bg-surface-container-low transition-colors ${
+                              isSelected ? 'bg-surface-container-low/60' : ''
+                            }`}
+                          >
+                            <td className="px-4 py-4">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 accent-primary"
+                                checked={isSelected}
+                                onChange={() => toggleSelectBank(bank.id)}
+                              />
+                            </td>
                             <td className="px-4 py-4">
                               <button
                                 type="button"
@@ -440,6 +667,15 @@ export default function SuperAdminBanksPage() {
                             <td className="px-6 py-4 text-sm text-on-surface-variant">
                               {dateFormatter.format(new Date(bank.createdAt))}
                             </td>
+                            <td className="px-6 py-4">
+                              <span
+                                className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${
+                                  isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'
+                                }`}
+                              >
+                                {isActive ? 'Activa' : 'Inactiva'}
+                              </span>
+                            </td>
                             <td className="px-6 py-4 text-right">
                               <div className="text-xs font-semibold text-on-surface-variant">
                                 {isLoadingBranches
@@ -449,10 +685,37 @@ export default function SuperAdminBanksPage() {
                                     : 'Sin cargar'}
                               </div>
                             </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end gap-3">
+                                <button
+                                  type="button"
+                                  className="text-xs font-bold text-primary hover:underline"
+                                  onClick={() => startEditBank(bank)}
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  type="button"
+                                  className="text-xs font-bold text-amber-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => toggleBankStatus(bank)}
+                                  disabled={bankTogglingId === bank.id}
+                                >
+                                  {isActive ? 'Desactivar' : 'Activar'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="text-xs font-bold text-rose-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => deleteBank(bank)}
+                                  disabled={bankDeletingId === bank.id}
+                                >
+                                  {bankDeletingId === bank.id ? 'Eliminando...' : 'Eliminar'}
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                           {expanded ? (
                             <tr key={`${bank.id}-branches`}>
-                              <td colSpan={5} className="px-6 pb-6">
+                              <td colSpan={8} className="px-6 pb-6">
                                 <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-4">
                                   <div className="flex items-center justify-between mb-4">
                                     <h3 className="text-sm font-semibold text-slate-900">Sucursales</h3>
@@ -636,6 +899,123 @@ export default function SuperAdminBanksPage() {
             disabled={bankSaving}
           >
             {bankSaving ? 'Creando...' : 'Crear banco'}
+          </button>
+        </form>
+      </Modal>
+
+      <Modal
+        open={showEditBankModal}
+        title="Editar banco"
+        onClose={() => {
+          setShowEditBankModal(false);
+          setEditingBank(null);
+        }}
+      >
+        <form onSubmit={onUpdateBank} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Nombre</label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={editNombre}
+                onChange={(event) => setEditNombre(event.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Slug</label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={editSlug}
+                onChange={(event) => setEditSlug(event.target.value)}
+                required
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Medios de pago</label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={editPayments}
+                onChange={(event) => setEditPayments(event.target.value)}
+                placeholder="Visa, Mastercard"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">BINes</label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={editBines}
+                onChange={(event) => setEditBines(event.target.value)}
+                placeholder="456789, 554433"
+              />
+            </div>
+          </div>
+          <button
+            className="w-full primary-gradient text-white font-medium py-3.5 rounded-xl shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all active:scale-[0.98]"
+            type="submit"
+            disabled={bankUpdating}
+          >
+            {bankUpdating ? 'Guardando...' : 'Guardar cambios'}
+          </button>
+        </form>
+      </Modal>
+
+      <Modal
+        open={showBulkEditModal}
+        title="Edicion masiva de bancos"
+        onClose={() => {
+          setShowBulkEditModal(false);
+        }}
+      >
+        <form onSubmit={onBulkUpdate} className="space-y-4">
+          <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Se aplicaran los cambios a {selectedBankIds.length} bancos seleccionados.
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Estado</label>
+              <select
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={bulkActivo}
+                onChange={(event) => setBulkActivo(event.target.value as BulkStatus)}
+              >
+                <option value="keep">No cambiar</option>
+                <option value="active">Activar</option>
+                <option value="inactive">Desactivar</option>
+              </select>
+            </div>
+            <div className="text-xs text-on-surface-variant flex items-end pb-2">
+              Usa los campos vacios para mantener el valor actual.
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Medios de pago</label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={bulkPayments}
+                onChange={(event) => setBulkPayments(event.target.value)}
+                placeholder="Visa, Mastercard"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">BINes</label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={bulkBines}
+                onChange={(event) => setBulkBines(event.target.value)}
+                placeholder="456789, 554433"
+              />
+            </div>
+          </div>
+          <button
+            className="w-full primary-gradient text-white font-medium py-3.5 rounded-xl shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all active:scale-[0.98]"
+            type="submit"
+            disabled={bulkUpdating}
+          >
+            {bulkUpdating ? 'Aplicando...' : 'Aplicar cambios'}
           </button>
         </form>
       </Modal>

@@ -1,7 +1,20 @@
-import { Body, Controller, Get, Post, Put, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { BanksService } from './banks.service';
 import { CreateBankDto } from './dto/create-bank.dto';
 import { UpdateBankDto } from './dto/update-bank.dto';
+import { UpdateBankSuperadminDto } from './dto/update-bank-superadmin.dto';
 import { JwtAuthGuard } from '../common/jwt-auth.guard';
 import { RolesGuard } from '../common/roles.guard';
 import { Roles } from '../common/roles.decorator';
@@ -26,6 +39,24 @@ export class BanksController {
   @Post()
   async create(@Body() dto: CreateBankDto) {
     return this.banksService.create(dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPERADMIN)
+  @Patch(':id')
+  async updateById(
+    @Param('id') id: string,
+    @Body() dto: UpdateBankSuperadminDto,
+    @CurrentUser() user: { userId: string },
+  ) {
+    return this.banksService.updateById(id, dto, user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPERADMIN)
+  @Delete(':id')
+  async remove(@Param('id') id: string, @CurrentUser() user: { userId: string }) {
+    return this.banksService.remove(id, user.userId);
   }
 
   @UseGuards(JwtAuthGuard)

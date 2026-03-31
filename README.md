@@ -44,6 +44,28 @@ npm run dev
 - API: `http://localhost:3001/api`
 - Web: `http://localhost:3000`
 
+## VPS (dev-bank.hollywoodsoft.com)
+- Host: `matias@74.208.218.120`
+- OS/Arch: Ubuntu 24.04.4 LTS (x86_64)
+- Path del proyecto: `/home/matias/dev-bank`
+- Dominio web: `https://dev-bank.hollywoodsoft.com`
+- Dominio API: `https://dev-bank.hollywoodsoft.com/api`
+- PM2 API: `dev-bank-api` (Node, `apps/api/dist/main.js`, puerto 3001)
+- PM2 Web: `dev-bank-web` (Next `start -p 3000`)
+- Nginx `/` -> `127.0.0.1:3000`
+- Nginx `/api` -> `127.0.0.1:3001`
+- Postgres Docker: `dev-bank-postgres` en `5432`
+
+Comandos utiles:
+```bash
+pm2 ls
+pm2 logs dev-bank-api
+pm2 logs dev-bank-web
+sudo nginx -t
+sudo systemctl reload nginx
+docker ps
+```
+
 ## Seguridad multi-tenant
 - Cada banco es un tenant (`Bank`).
 - Todas las entidades relevantes incluyen `tenantId`.
