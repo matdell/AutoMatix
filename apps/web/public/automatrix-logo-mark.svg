@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&amp;display=swap');
+      .title {
+        font-family: 'Montserrat', sans-serif;
+        font-size: 85px;
+        font-weight: 700;
+      }
+      .dark-blue { fill: #0B1B4A; }
+      .purple-blue { fill: #4854D4; }
+    </style>
+  </defs>
+  <g transform="translate(400 150)" text-anchor="middle">
+    <text class="title">
+      <tspan class="dark-blue">Auto</tspan><tspan class="purple-blue">Matix</tspan>
+    </text>
+  </g>
+</svg>

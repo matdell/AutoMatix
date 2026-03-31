@@ -1,0 +1,68 @@
+import { Body, Controller, Get, Post, Put, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BanksService } from './banks.service';
+import { CreateBankDto } from './dto/create-bank.dto';
+import { UpdateBankDto } from './dto/update-bank.dto';
+import { JwtAuthGuard } from '../common/jwt-auth.guard';
+import { RolesGuard } from '../common/roles.guard';
+import { Roles } from '../common/roles.decorator';
+import { Role } from '@prisma/client';
+import { CurrentUser } from '../common/current-user.decorator';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { StorageService } from '../storage/storage.service';
+
+@Controller('banks')
+export class BanksController {
+  constructor(private banksService: BanksService, private storage: StorageService) {}
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPERADMIN)
+  @Get()
+  async list() {
+    return this.banksService.list();
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPERADMIN)
+  @Post()
+  async create(@Body() dto: CreateBankDto) {
+    return this.banksService.create(dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  async me(@CurrentUser() user: { tenantId: string }) {
+    return this.banksService.getCurrent(user.tenantId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.BANK_ADMIN)
+  @Put('me')
+  async update(
+    @Body() dto: UpdateBankDto,
+    @CurrentUser() user: { tenantId: string; userId: string },
+  ) {
+    return this.banksService.updateCurrent(user.tenantId, dto, user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.BANK_ADMIN)
+  @Post('me/logo')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadLogo(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: { tenantId: string; userId: string },
+  ) {
+    const upload = await this.storage.upload({
+      tenantId: user.tenantId,
+      buffer: file.buffer,
+      contentType: file.mimetype,
+      filename: file.originalname,
+      prefix: 'logos',
+    });
+    return this.banksService.updateCurrent(
+      user.tenantId,
+      { logoUrl: upload.url },
+      user.userId,
+    );
+  }
+}

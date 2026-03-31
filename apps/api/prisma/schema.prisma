@@ -1,0 +1,305 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPERADMIN
+  BANK_ADMIN
+  BANK_OPS
+  BANK_APPROVER
+  BANK_BRANCH_MANAGER
+  BANK_BRANCH_OPERATOR
+  MERCHANT_ADMIN
+  MERCHANT_USER
+  ADMIN
+  MERCHANT
+  OPERATIONS
+}
+
+enum MerchantStatus {
+  ACTIVE
+  PENDING
+  RESTRICTED
+}
+
+enum CampaignType {
+  DISCOUNT
+  INSTALLMENTS
+  CASHBACK
+}
+
+enum CampaignStatus {
+  INVITED
+  OPERATIONS
+  PROCESSOR
+  PARTIAL
+  ACTIVE
+  ARCHIVED
+}
+
+enum InvitationStatus {
+  INVITED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum NotificationType {
+  INVITATION
+  REMINDER
+  VALIDATION_ERROR
+  WELCOME
+  PASSWORD_RESET
+}
+
+model Bank {
+  id             String   @id @default(cuid())
+  nombre         String
+  slug           String   @unique
+  logoUrl        String?
+  paymentMethods String[]
+  bines          String[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  users          User[]
+  bankBranches   BankBranch[]
+  merchants      Merchant[]
+  branches       Branch[]
+  campaigns      Campaign[]
+  invitations    Invitation[]
+  validations    ValidationError[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+}
+
+model BankBranch {
+  id        String   @id @default(cuid())
+  bankId    String
+  bank      Bank     @relation(fields: [bankId], references: [id])
+  nombre    String
+  codigo    String?
+  localidad String?
+  region    String?
+  tipo      String?
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+
+  @@index([bankId])
+}
+
+model User {
+  id            String   @id @default(cuid())
+  tenantId      String
+  bank          Bank     @relation(fields: [tenantId], references: [id])
+  email         String
+  passwordHash  String
+  nombre        String
+  role          Role
+  merchantId    String?
+  bankBranchId  String?
+  isActive      Boolean  @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  merchant      Merchant? @relation(fields: [merchantId], references: [id])
+  bankBranch    BankBranch? @relation(fields: [bankBranchId], references: [id])
+  auditLogs     AuditLog[]
+  archivedCampaigns Campaign[] @relation("CampaignArchivedBy")
+  passwordResetTokens PasswordResetToken[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([bankBranchId])
+}
+
+model Merchant {
+  id            String         @id @default(cuid())
+  tenantId      String
+  bank          Bank           @relation(fields: [tenantId], references: [id])
+  nombre        String
+  categoria     String
+  estado        MerchantStatus @default(PENDING)
+  cuit          String?
+  merchantNumber String?
+  contactoEmail String?
+  telefono      String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  branches      Branch[]
+  campaigns     CampaignMerchant[]
+  invitations   Invitation[]
+  validations   ValidationError[]
+  users         User[]
+
+  @@index([tenantId])
+}
+
+model Branch {
+  id            String   @id @default(cuid())
+  tenantId      String
+  bank          Bank     @relation(fields: [tenantId], references: [id])
+  merchantId    String
+  merchant      Merchant @relation(fields: [merchantId], references: [id])
+  nombre        String
+  direccion     String
+  ciudad        String
+  provincia     String
+  pais          String
+  placeId       String?
+  lat           Float?
+  lng           Float?
+  merchantNumber String?
+  processor     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  campaignLinks CampaignMerchant[]
+  invitationLinks InvitationBranch[]
+
+  @@index([tenantId])
+  @@index([merchantId])
+}
+
+model Campaign {
+  id          String         @id @default(cuid())
+  tenantId    String
+  bank        Bank           @relation(fields: [tenantId], references: [id])
+  nombre      String
+  tipo        CampaignType
+  estado      CampaignStatus @default(INVITED)
+  estadoAnterior CampaignStatus?
+  archivedAt  DateTime?
+  archivedById String?
+  archivedBy  User?          @relation("CampaignArchivedBy", fields: [archivedById], references: [id])
+  fechaInicio DateTime
+  fechaFin    DateTime
+  condiciones Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  merchants   CampaignMerchant[]
+
+  @@index([tenantId])
+  @@index([archivedById])
+}
+
+model CampaignMerchant {
+  id         String   @id @default(cuid())
+  tenantId   String
+  campaignId String
+  merchantId String
+  branchId   String?
+  createdAt  DateTime @default(now())
+
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  branch     Branch?  @relation(fields: [branchId], references: [id])
+
+  @@index([tenantId])
+  @@index([campaignId])
+  @@index([merchantId])
+}
+
+model Invitation {
+  id         String           @id @default(cuid())
+  tenantId   String
+  bank       Bank             @relation(fields: [tenantId], references: [id])
+  email      String
+  merchantId String?
+  merchant   Merchant?        @relation(fields: [merchantId], references: [id])
+  status     InvitationStatus @default(INVITED)
+  token      String           @unique
+  expiresAt  DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  branches   InvitationBranch[]
+
+  @@index([tenantId])
+}
+
+model InvitationBranch {
+  id           String     @id @default(cuid())
+  tenantId     String
+  invitationId String
+  branchId     String
+
+  invitation   Invitation @relation(fields: [invitationId], references: [id])
+  branch       Branch     @relation(fields: [branchId], references: [id])
+
+  @@index([tenantId])
+}
+
+model ValidationError {
+  id         String   @id @default(cuid())
+  tenantId   String
+  bank       Bank     @relation(fields: [tenantId], references: [id])
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  codigo     String
+  mensaje    String
+  resuelto   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  tenantId  String
+  bank      Bank             @relation(fields: [tenantId], references: [id])
+  tipo      NotificationType
+  destino   String
+  estado    String
+  payload   Json?
+  createdAt DateTime         @default(now())
+
+  @@index([tenantId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  tenantId  String
+  bank      Bank        @relation(fields: [tenantId], references: [id])
+  userId    String?
+  user      User?       @relation(fields: [userId], references: [id])
+  action    AuditAction
+  entity    String
+  entityId  String
+  before    Json?
+  after     Json?
+  createdAt DateTime    @default(now())
+
+  @@index([tenantId])
+  @@index([entity])
+}

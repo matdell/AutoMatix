@@ -1,0 +1,16 @@
+{
+  "name": "plataforma-campanas",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "concurrently -n API,WEB -c cyan,magenta \"npm:dev --workspace apps/api\" \"npm:dev --workspace apps/web\"",
+    "dev:api": "npm run dev --workspace apps/api",
+    "dev:web": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspace apps/api && npm run build --workspace apps/web",
+    "lint": "npm run lint --workspace apps/web",
+    "seed": "npm run seed --workspace apps/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

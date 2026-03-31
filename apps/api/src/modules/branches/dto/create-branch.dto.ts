@@ -1,0 +1,43 @@
+import { IsNotEmpty, IsOptional, IsString, IsNumber } from 'class-validator';
+
+export class CreateBranchDto {
+  @IsString()
+  @IsNotEmpty()
+  nombre: string;
+
+  @IsString()
+  @IsNotEmpty()
+  direccion: string;
+
+  @IsString()
+  @IsNotEmpty()
+  ciudad: string;
+
+  @IsString()
+  @IsNotEmpty()
+  provincia: string;
+
+  @IsString()
+  @IsNotEmpty()
+  pais: string;
+
+  @IsOptional()
+  @IsString()
+  placeId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  lat?: number;
+
+  @IsOptional()
+  @IsNumber()
+  lng?: number;
+
+  @IsOptional()
+  @IsString()
+  merchantNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  processor?: string;
+}
