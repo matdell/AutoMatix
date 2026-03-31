@@ -56,6 +56,8 @@ npm run dev
 - Dominio central (staging): `https://staging.automatixpay.com`
 - Dominio web banco (dev separado): `https://devbank.automatixpay.com`
 - Dominio API banco (dev separado): `https://devbank.automatixpay.com/api`
+- Dominio web banco (dev staging separado): `https://devbankstaging.automatixpay.com`
+- Dominio API banco (dev staging separado): `https://devbankstaging.automatixpay.com/api`
 - PM2 API: `dev-bank-api` (Node, `apps/api/dist/main.js`, puerto 3001)
 - PM2 Web: `dev-bank-web` (Next `start -p 3000`)
 - PM2 Central: `dev-bank-central` (Node, `apps/central-api/src/server.js`, puerto 4001)
