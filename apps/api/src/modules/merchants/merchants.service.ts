@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { CreateMerchantDto } from './dto/create-merchant.dto';
 import { UpdateMerchantDto } from './dto/update-merchant.dto';
@@ -21,10 +21,34 @@ export class MerchantsService {
     });
   }
 
+  async listByBrand(tenantId: string, brandId: string, filters?: { estado?: MerchantStatus; categoria?: string }) {
+    return this.prisma.merchant.findMany({
+      where: {
+        tenantId,
+        estado: filters?.estado,
+        categoria: filters?.categoria,
+        brands: {
+          some: {
+            brandId,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async isMerchantInBrand(tenantId: string, brandId: string, merchantId: string) {
+    const link = await this.prisma.brandLegalEntity.findFirst({
+      where: { tenantId, brandId, merchantId },
+      select: { id: true },
+    });
+    return Boolean(link);
+  }
+
   async get(tenantId: string, id: string) {
     const merchant = await this.prisma.merchant.findFirst({
       where: { tenantId, id },
-      include: { branches: true },
+      include: { branches: true, brands: { include: { brand: true } } },
     });
     if (!merchant) {
       throw new NotFoundException('Comercio no encontrado');
@@ -33,6 +57,16 @@ export class MerchantsService {
   }
 
   async create(tenantId: string, dto: CreateMerchantDto, actorId?: string) {
+    const uniqueBrandIds = dto.brandIds ? Array.from(new Set(dto.brandIds)) : [];
+    if (uniqueBrandIds.length) {
+      const brands = await this.prisma.brand.findMany({
+        where: { tenantId, id: { in: uniqueBrandIds } },
+        select: { id: true },
+      });
+      if (brands.length !== uniqueBrandIds.length) {
+        throw new BadRequestException('Marca invalida');
+      }
+    }
     const merchant = await this.prisma.merchant.create({
       data: {
         tenantId,
@@ -45,6 +79,17 @@ export class MerchantsService {
         telefono: dto.telefono,
       },
     });
+
+    if (uniqueBrandIds.length) {
+      await this.prisma.brandLegalEntity.createMany({
+        data: uniqueBrandIds.map((brandId) => ({
+          tenantId,
+          brandId,
+          merchantId: merchant.id,
+        })),
+        skipDuplicates: true,
+      });
+    }
 
     await this.audit.log({
       tenantId,
@@ -63,6 +108,16 @@ export class MerchantsService {
     if (!before) {
       throw new NotFoundException('Comercio no encontrado');
     }
+    const uniqueBrandIds = dto.brandIds ? Array.from(new Set(dto.brandIds)) : [];
+    if (dto.brandIds) {
+      const brands = await this.prisma.brand.findMany({
+        where: { tenantId, id: { in: uniqueBrandIds } },
+        select: { id: true },
+      });
+      if (brands.length !== uniqueBrandIds.length) {
+        throw new BadRequestException('Marca invalida');
+      }
+    }
     const merchant = await this.prisma.merchant.update({
       where: { id },
       data: {
@@ -75,6 +130,22 @@ export class MerchantsService {
         telefono: dto.telefono ?? undefined,
       },
     });
+
+    if (dto.brandIds) {
+      await this.prisma.brandLegalEntity.deleteMany({
+        where: { tenantId, merchantId: id },
+      });
+      if (uniqueBrandIds.length) {
+        await this.prisma.brandLegalEntity.createMany({
+          data: uniqueBrandIds.map((brandId) => ({
+            tenantId,
+            brandId,
+            merchantId: id,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
 
     await this.audit.log({
       tenantId,

@@ -21,6 +21,22 @@ export class BranchesService {
     });
   }
 
+  async get(tenantId: string, id: string) {
+    const branch = await this.prisma.branch.findFirst({ where: { tenantId, id } });
+    if (!branch) {
+      throw new NotFoundException('Sucursal no encontrada');
+    }
+    return branch;
+  }
+
+  async isMerchantInBrand(tenantId: string, brandId: string, merchantId: string) {
+    const link = await this.prisma.brandLegalEntity.findFirst({
+      where: { tenantId, brandId, merchantId },
+      select: { id: true },
+    });
+    return Boolean(link);
+  }
+
   async create(tenantId: string, merchantId: string, dto: CreateBranchDto, actorId?: string) {
     const merchant = await this.prisma.merchant.findFirst({ where: { tenantId, id: merchantId } });
     if (!merchant) {
@@ -67,10 +83,7 @@ export class BranchesService {
   }
 
   async update(tenantId: string, id: string, dto: UpdateBranchDto, actorId?: string) {
-    const before = await this.prisma.branch.findFirst({ where: { tenantId, id } });
-    if (!before) {
-      throw new NotFoundException('Sucursal no encontrada');
-    }
+    const before = await this.get(tenantId, id);
 
     let lat = dto.lat;
     let lng = dto.lng;
@@ -112,10 +125,7 @@ export class BranchesService {
   }
 
   async remove(tenantId: string, id: string, actorId?: string) {
-    const before = await this.prisma.branch.findFirst({ where: { tenantId, id } });
-    if (!before) {
-      throw new NotFoundException('Sucursal no encontrada');
-    }
+    const before = await this.get(tenantId, id);
     await this.prisma.branch.delete({ where: { id } });
 
     await this.audit.log({

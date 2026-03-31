@@ -30,14 +30,27 @@ export class RolesGuard implements CanActivate {
     if (user?.role === Role.MERCHANT) {
       effectiveRoles.add(Role.MERCHANT_USER);
     }
+    if (user?.role === Role.MERCHANT_USER) {
+      effectiveRoles.add(Role.POS_ADMIN);
+      effectiveRoles.add(Role.LEGAL_ENTITY_ADMIN);
+    }
     if (user?.role === Role.BANK_ADMIN) {
       effectiveRoles.add(Role.BANK_OPS);
     }
     if (user?.role === Role.BANK_BRANCH_MANAGER) {
       effectiveRoles.add(Role.BANK_BRANCH_OPERATOR);
     }
+    if (user?.role === Role.BRAND_ADMIN) {
+      effectiveRoles.add(Role.LEGAL_ENTITY_ADMIN);
+      effectiveRoles.add(Role.POS_ADMIN);
+    }
+    if (user?.role === Role.LEGAL_ENTITY_ADMIN) {
+      effectiveRoles.add(Role.POS_ADMIN);
+    }
     if (user?.role === Role.MERCHANT_ADMIN) {
       effectiveRoles.add(Role.MERCHANT_USER);
+      effectiveRoles.add(Role.LEGAL_ENTITY_ADMIN);
+      effectiveRoles.add(Role.POS_ADMIN);
     }
     return requiredRoles.some((role) => effectiveRoles.has(role));
   }

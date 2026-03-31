@@ -18,15 +18,40 @@ type BankBranch = {
   localidad?: string | null;
 };
 
+type Brand = {
+  id: string;
+  nombre: string;
+  activo?: boolean;
+};
+
+type Merchant = {
+  id: string;
+  nombre: string;
+  cuit?: string | null;
+  brands?: { brand: { id: string; nombre: string } }[];
+};
+
+type PointOfSale = {
+  id: string;
+  nombre: string;
+  direccion?: string | null;
+  ciudad?: string | null;
+};
+
 type User = {
   id: string;
   nombre: string;
   email: string;
   role: string;
+  brandId?: string | null;
   merchantId?: string | null;
   bankBranchId?: string | null;
+  pointOfSaleId?: string | null;
   bank?: { id: string; nombre: string; slug: string } | null;
   bankBranch?: { id: string; nombre: string; codigo?: string | null; localidad?: string | null } | null;
+  brand?: { id: string; nombre: string } | null;
+  merchant?: Merchant | null;
+  pointOfSale?: PointOfSale | null;
   isActive: boolean;
   lastLoginAt?: string | null;
 };
@@ -43,6 +68,9 @@ const roleLabels: Record<string, string> = {
   BANK_APPROVER: 'Aprobador Banco',
   BANK_BRANCH_MANAGER: 'Sucursal (Manager)',
   BANK_BRANCH_OPERATOR: 'Sucursal (Operador)',
+  BRAND_ADMIN: 'Admin Marca',
+  LEGAL_ENTITY_ADMIN: 'Admin Razon Social',
+  POS_ADMIN: 'Admin PDV',
   MERCHANT_ADMIN: 'Admin Comercio',
   MERCHANT_USER: 'Usuario Comercio',
 };
@@ -54,12 +82,17 @@ const roleOptions = [
   'BANK_APPROVER',
   'BANK_BRANCH_MANAGER',
   'BANK_BRANCH_OPERATOR',
+  'BRAND_ADMIN',
+  'LEGAL_ENTITY_ADMIN',
+  'POS_ADMIN',
   'MERCHANT_ADMIN',
   'MERCHANT_USER',
 ];
 
 const branchRoles = new Set(['BANK_BRANCH_MANAGER', 'BANK_BRANCH_OPERATOR']);
-const merchantRoles = new Set(['MERCHANT_ADMIN', 'MERCHANT_USER']);
+const brandRoles = new Set(['BRAND_ADMIN']);
+const legalEntityRoles = new Set(['LEGAL_ENTITY_ADMIN', 'MERCHANT_ADMIN', 'MERCHANT_USER']);
+const pointOfSaleRoles = new Set(['POS_ADMIN']);
 
 const statusPill = (active: boolean) =>
   active
@@ -72,6 +105,9 @@ export default function SuperAdminUsersPage() {
   const [banks, setBanks] = useState<Bank[]>([]);
   const [selectedBankId, setSelectedBankId] = useState('');
   const [bankBranches, setBankBranches] = useState<BankBranch[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [merchants, setMerchants] = useState<Merchant[]>([]);
+  const [pointsOfSale, setPointsOfSale] = useState<PointOfSale[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -82,7 +118,8 @@ export default function SuperAdminUsersPage() {
 
   const [userPageSize, setUserPageSize] = useState(25);
   const [userPage, setUserPage] = useState(1);
-  const [userFilter, setUserFilter] = useState<'all' | 'bank' | 'merchant' | 'branch'>('all');
+  const [userView, setUserView] = useState<'bank' | 'commercial'>('bank');
+  const [userFilter, setUserFilter] = useState<'all' | 'bank' | 'bank-branch' | 'brand' | 'legal-entity' | 'pos'>('all');
 
   const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -90,17 +127,44 @@ export default function SuperAdminUsersPage() {
   const [userEmail, setUserEmail] = useState('');
   const [userPassword, setUserPassword] = useState('');
   const [userRole, setUserRole] = useState('BANK_ADMIN');
+  const [userBrandId, setUserBrandId] = useState('');
   const [userMerchantId, setUserMerchantId] = useState('');
   const [userBankBranchId, setUserBankBranchId] = useState('');
+  const [userPointOfSaleId, setUserPointOfSaleId] = useState('');
   const [userActive, setUserActive] = useState(true);
 
   const isSuperAdmin = role === 'SUPERADMIN';
   const needsBranch = branchRoles.has(userRole);
-  const isMerchantRole = merchantRoles.has(userRole);
+  const isBrandRole = brandRoles.has(userRole);
+  const isLegalEntityRole = legalEntityRoles.has(userRole);
+  const isPointOfSaleRole = pointOfSaleRoles.has(userRole);
 
   const bankOptions = useMemo(
     () => banks.map((bank) => ({ value: bank.id, label: `${bank.nombre} - ${bank.slug}` })),
     [banks],
+  );
+
+  const brandOptions = useMemo(
+    () => brands.map((brand) => ({ value: brand.id, label: brand.nombre })),
+    [brands],
+  );
+
+  const merchantOptions = useMemo(
+    () =>
+      merchants.map((merchant) => ({
+        value: merchant.id,
+        label: merchant.cuit ? `${merchant.nombre} · ${merchant.cuit}` : merchant.nombre,
+      })),
+    [merchants],
+  );
+
+  const pointOfSaleOptions = useMemo(
+    () =>
+      pointsOfSale.map((pos) => ({
+        value: pos.id,
+        label: pos.ciudad ? `${pos.nombre} · ${pos.ciudad}` : pos.nombre,
+      })),
+    [pointsOfSale],
   );
 
   const dateTimeFormatter = useMemo(
@@ -165,6 +229,40 @@ export default function SuperAdminUsersPage() {
     }
   };
 
+  const loadBrands = async (bankId: string) => {
+    if (!bankId) return;
+    try {
+      const data = await apiJson<Brand[]>(`/brands?bankId=${bankId}`);
+      setBrands(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudieron cargar las marcas');
+    }
+  };
+
+  const loadMerchants = async (bankId: string) => {
+    if (!bankId) return;
+    try {
+      const data = await apiJson<Merchant[]>(`/merchants?bankId=${bankId}`);
+      setMerchants(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudieron cargar las razones sociales');
+    }
+  };
+
+  const loadPointsOfSale = async (merchantId: string) => {
+    if (!merchantId) {
+      setPointsOfSale([]);
+      return;
+    }
+    try {
+      const data = await apiJson<PointOfSale[]>(`/merchants/${merchantId}/branches`);
+      setPointsOfSale(data);
+    } catch (err) {
+      setPointsOfSale([]);
+      setError(err instanceof Error ? err.message : 'No se pudieron cargar los puntos de venta');
+    }
+  };
+
   useEffect(() => {
     if (!isSuperAdmin) return;
     loadBanks();
@@ -175,7 +273,23 @@ export default function SuperAdminUsersPage() {
     window.localStorage.setItem('superadmin-bank-id', selectedBankId);
     loadUsers(selectedBankId);
     loadBranches(selectedBankId);
+    loadBrands(selectedBankId);
+    loadMerchants(selectedBankId);
   }, [isSuperAdmin, selectedBankId]);
+
+  useEffect(() => {
+    if (!isPointOfSaleRole) {
+      setPointsOfSale([]);
+      setUserPointOfSaleId('');
+      return;
+    }
+    if (userMerchantId) {
+      loadPointsOfSale(userMerchantId);
+    } else {
+      setPointsOfSale([]);
+      setUserPointOfSaleId('');
+    }
+  }, [isPointOfSaleRole, userMerchantId]);
 
   useEffect(() => {
     if (userPage > 1) {
@@ -183,18 +297,32 @@ export default function SuperAdminUsersPage() {
     }
   }, [userFilter, userPageSize]);
 
+  useEffect(() => {
+    setUserFilter('all');
+    setUserPage(1);
+  }, [userView]);
+
   const filteredUsers = useMemo(() => {
+    const isCommercial = userView === 'commercial';
+    const base = isCommercial
+      ? users.filter((user) => Boolean(user.brandId || user.merchantId || user.pointOfSaleId))
+      : users.filter((user) => !user.brandId && !user.merchantId && !user.pointOfSaleId);
+
     switch (userFilter) {
       case 'bank':
-        return users.filter((user) => !user.merchantId && !user.bankBranchId);
-      case 'merchant':
-        return users.filter((user) => Boolean(user.merchantId));
-      case 'branch':
-        return users.filter((user) => Boolean(user.bankBranchId));
+        return base.filter((user) => !user.bankBranchId);
+      case 'bank-branch':
+        return base.filter((user) => Boolean(user.bankBranchId));
+      case 'brand':
+        return base.filter((user) => Boolean(user.brandId));
+      case 'legal-entity':
+        return base.filter((user) => Boolean(user.merchantId) && !user.pointOfSaleId);
+      case 'pos':
+        return base.filter((user) => Boolean(user.pointOfSaleId));
       default:
-        return users;
+        return base;
     }
-  }, [users, userFilter]);
+  }, [users, userFilter, userView]);
 
   const paginatedUsers = useMemo(() => {
     const start = (userPage - 1) * userPageSize;
@@ -213,9 +341,11 @@ export default function SuperAdminUsersPage() {
     setUserNombre('');
     setUserEmail('');
     setUserPassword('');
-    setUserRole('BANK_ADMIN');
+    setUserRole(userView === 'commercial' ? 'BRAND_ADMIN' : 'BANK_ADMIN');
+    setUserBrandId('');
     setUserMerchantId('');
     setUserBankBranchId('');
+    setUserPointOfSaleId('');
     setUserActive(true);
     setEditingUser(null);
     setFormMode(null);
@@ -229,9 +359,11 @@ export default function SuperAdminUsersPage() {
     setUserNombre('');
     setUserEmail('');
     setUserPassword('');
-    setUserRole('BANK_ADMIN');
+    setUserRole(userView === 'commercial' ? 'BRAND_ADMIN' : 'BANK_ADMIN');
+    setUserBrandId('');
     setUserMerchantId('');
     setUserBankBranchId('');
+    setUserPointOfSaleId('');
     setUserActive(true);
   };
 
@@ -244,8 +376,10 @@ export default function SuperAdminUsersPage() {
     setUserEmail(user.email || '');
     setUserPassword('');
     setUserRole(user.role || 'BANK_ADMIN');
+    setUserBrandId(user.brandId || '');
     setUserMerchantId(user.merchantId || '');
     setUserBankBranchId(user.bankBranchId || '');
+    setUserPointOfSaleId(user.pointOfSaleId || '');
     setUserActive(Boolean(user.isActive));
   };
 
@@ -272,8 +406,19 @@ export default function SuperAdminUsersPage() {
         if (needsBranch) {
           payload.bankBranchId = userBankBranchId || undefined;
         }
-        if (isMerchantRole && userMerchantId.trim()) {
+        if (isBrandRole && userBrandId.trim()) {
+          payload.brandId = userBrandId.trim();
+        }
+        if (isLegalEntityRole && userMerchantId.trim()) {
           payload.merchantId = userMerchantId.trim();
+        }
+        if (isPointOfSaleRole) {
+          if (userMerchantId.trim()) {
+            payload.merchantId = userMerchantId.trim();
+          }
+          if (userPointOfSaleId.trim()) {
+            payload.pointOfSaleId = userPointOfSaleId.trim();
+          }
         }
         await apiJson('/auth/registro', {
           method: 'POST',
@@ -292,8 +437,20 @@ export default function SuperAdminUsersPage() {
         } else if (!needsBranch) {
           payload.bankBranchId = '';
         }
-        if (isMerchantRole) {
+        if (isBrandRole) {
+          payload.brandId = userBrandId.trim() || undefined;
+        } else {
+          payload.brandId = '';
+        }
+        if (isLegalEntityRole || isPointOfSaleRole) {
           payload.merchantId = userMerchantId.trim() || undefined;
+        } else {
+          payload.merchantId = '';
+        }
+        if (isPointOfSaleRole) {
+          payload.pointOfSaleId = userPointOfSaleId.trim() || undefined;
+        } else {
+          payload.pointOfSaleId = '';
         }
         await apiJson(`/users/${editingUser.id}?bankId=${selectedBankId}`, {
           method: 'PATCH',
@@ -412,12 +569,36 @@ export default function SuperAdminUsersPage() {
             <section className="bg-surface-container-lowest rounded-2xl p-6 shadow-[0px_12px_32px_rgba(42,52,57,0.06)] space-y-6">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-on-surface">Usuarios del banco</h2>
+                  <h2 className="text-lg font-semibold text-on-surface">Usuarios</h2>
                   <p className="text-sm text-on-surface-variant">
-                    Administra usuarios, roles y accesos por entidad bancaria.
+                    Administra usuarios, roles y accesos por nivel.
                   </p>
                 </div>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                        userView === 'bank'
+                          ? 'bg-primary text-white'
+                          : 'bg-surface-container-low text-on-surface-variant'
+                      }`}
+                      onClick={() => setUserView('bank')}
+                    >
+                      Usuarios Bancos
+                    </button>
+                    <button
+                      type="button"
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                        userView === 'commercial'
+                          ? 'bg-primary text-white'
+                          : 'bg-surface-container-low text-on-surface-variant'
+                      }`}
+                      onClick={() => setUserView('commercial')}
+                    >
+                      Usuarios Marcas
+                    </button>
+                  </div>
                   <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
                     Banco
                   </label>
@@ -433,17 +614,30 @@ export default function SuperAdminUsersPage() {
                     ))}
                   </select>
                   <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-                    Asociacion
+                    Nivel
                   </label>
                   <select
                     className="bg-surface-container-low border-none rounded-xl px-4 py-2 text-sm"
                     value={userFilter}
-                    onChange={(event) => setUserFilter(event.target.value as 'all' | 'bank' | 'merchant' | 'branch')}
+                    onChange={(event) =>
+                      setUserFilter(
+                        event.target.value as 'all' | 'bank' | 'bank-branch' | 'brand' | 'legal-entity' | 'pos',
+                      )
+                    }
                   >
                     <option value="all">Todos</option>
-                    <option value="bank">Banco</option>
-                    <option value="merchant">Comercio</option>
-                    <option value="branch">Sucursal</option>
+                    {userView === 'bank' ? (
+                      <>
+                        <option value="bank">Banco</option>
+                        <option value="bank-branch">Sucursal bancaria</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="brand">Marca</option>
+                        <option value="legal-entity">Razon social</option>
+                        <option value="pos">PDV</option>
+                      </>
+                    )}
                   </select>
                   <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
                     Registros por pagina
@@ -548,7 +742,9 @@ export default function SuperAdminUsersPage() {
                     </div>
                     {needsBranch ? (
                       <div>
-                        <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Sucursal</label>
+                        <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                          Sucursal bancaria
+                        </label>
                         <select
                           className="mt-2 w-full bg-surface-container-lowest border-none rounded-xl px-4 py-3 text-sm"
                           value={userBankBranchId}
@@ -566,15 +762,63 @@ export default function SuperAdminUsersPage() {
                         </select>
                       </div>
                     ) : null}
-                    {isMerchantRole ? (
+                    {isBrandRole ? (
                       <div>
-                        <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Merchant ID</label>
-                        <input
+                        <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Marca</label>
+                        <select
+                          className="mt-2 w-full bg-surface-container-lowest border-none rounded-xl px-4 py-3 text-sm"
+                          value={userBrandId}
+                          onChange={(event) => setUserBrandId(event.target.value)}
+                          required
+                        >
+                          <option value="">Selecciona una marca</option>
+                          {brandOptions.map((brand) => (
+                            <option key={brand.value} value={brand.value}>
+                              {brand.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
+                    {isLegalEntityRole || isPointOfSaleRole ? (
+                      <div>
+                        <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                          Razon social
+                        </label>
+                        <select
                           className="mt-2 w-full bg-surface-container-lowest border-none rounded-xl px-4 py-3 text-sm"
                           value={userMerchantId}
                           onChange={(event) => setUserMerchantId(event.target.value)}
-                          placeholder="merchantId"
-                        />
+                          required={isLegalEntityRole || isPointOfSaleRole}
+                        >
+                          <option value="">Selecciona una razon social</option>
+                          {merchantOptions.map((merchant) => (
+                            <option key={merchant.value} value={merchant.value}>
+                              {merchant.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
+                    {isPointOfSaleRole ? (
+                      <div>
+                        <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                          Punto de venta
+                        </label>
+                        <select
+                          className="mt-2 w-full bg-surface-container-lowest border-none rounded-xl px-4 py-3 text-sm"
+                          value={userPointOfSaleId}
+                          onChange={(event) => setUserPointOfSaleId(event.target.value)}
+                          required
+                          disabled={!userMerchantId}
+                        >
+                          <option value="">Selecciona un PDV</option>
+                          {pointOfSaleOptions.map((pos) => (
+                            <option key={pos.value} value={pos.value}>
+                              {pos.label}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     ) : null}
                     <button
@@ -604,7 +848,8 @@ export default function SuperAdminUsersPage() {
                 <form onSubmit={handleImport} className="bg-surface-container-low rounded-2xl p-6 space-y-3">
                   <h3 className="text-base font-semibold text-on-surface">Subida masiva (CSV)</h3>
                   <p className="text-xs text-on-surface-variant">
-                    Columnas requeridas: nombre, email, password, role. Opcionales: bankBranchId, merchantId.
+                    Columnas requeridas: nombre, email, password, role. Opcionales: bankBranchId, brandId,
+                    merchantId, pointOfSaleId.
                   </p>
                   <input className="w-full text-sm" type="file" accept=".csv" />
                   <button
@@ -620,104 +865,158 @@ export default function SuperAdminUsersPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-surface-container-low/50">
-                      <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
-                        Nombre
-                      </th>
-                      <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
-                        Email
-                      </th>
-                      <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
-                        Entidad
-                      </th>
-                      <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
-                        Rol
-                      </th>
-                      <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
-                        Sucursal
-                      </th>
-                      <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-center">
-                        Estado
-                      </th>
-                      <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
-                        Ultimo acceso
-                      </th>
-                      <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-right">
-                        Acciones
-                      </th>
-                    </tr>
+                    {userView === 'bank' ? (
+                      <tr className="bg-surface-container-low/50">
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Nombre
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Email
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Banco
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Sucursal bancaria
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Rol
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-center">
+                          Estado
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Ultimo acceso
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-right">
+                          Acciones
+                        </th>
+                      </tr>
+                    ) : (
+                      <tr className="bg-surface-container-low/50">
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Nombre
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Email
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Marca
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Razon social
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          PDV
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Rol
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-center">
+                          Estado
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Ultimo acceso
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-right">
+                          Acciones
+                        </th>
+                      </tr>
+                    )}
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {loading ? (
                       <tr>
-                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={8}>
+                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={userView === 'bank' ? 8 : 9}>
                           Cargando usuarios...
                         </td>
                       </tr>
                     ) : null}
                     {!loading && filteredUsers.length === 0 ? (
                       <tr>
-                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={8}>
+                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={userView === 'bank' ? 8 : 9}>
                           No hay usuarios para este filtro.
                         </td>
                       </tr>
                     ) : null}
-                    {paginatedUsers.map((user) => (
-                      <tr key={user.id} className="hover:bg-surface-container-low transition-colors group">
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-semibold text-on-surface">{user.nombre}</div>
-                          <div className="text-xs text-on-surface-variant">{user.id.slice(0, 8)}</div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-on-surface-variant">{user.email}</td>
-                        <td className="px-6 py-4 text-sm text-on-surface-variant">
-                          {user.bank?.nombre ?? '-'}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-on-surface-variant">
-                          {roleLabels[user.role] ?? user.role}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-on-surface-variant">
-                          {user.bankBranch?.nombre ?? '-'}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <span
-                            className={`inline-block px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${statusPill(
-                              user.isActive,
-                            )}`}
-                          >
-                            {user.isActive ? 'Activo' : 'Inactivo'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-on-surface-variant">
-                          {user.lastLoginAt ? dateTimeFormatter.format(new Date(user.lastLoginAt)) : '-'}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-3">
-                            <a
-                              className="text-xs font-bold text-primary hover:underline"
-                              href={`/superadmin/users/${user.id}?bankId=${selectedBankId}`}
+                    {paginatedUsers.map((user) => {
+                      const merchantBrand = user.merchant?.brands?.[0]?.brand?.nombre;
+                      return (
+                        <tr key={user.id} className="hover:bg-surface-container-low transition-colors group">
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-semibold text-on-surface">{user.nombre}</div>
+                            <div className="text-xs text-on-surface-variant">{user.id.slice(0, 8)}</div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-on-surface-variant">{user.email}</td>
+                          {userView === 'bank' ? (
+                            <>
+                              <td className="px-6 py-4 text-sm text-on-surface-variant">
+                                {user.bank?.nombre ?? '-'}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-on-surface-variant">
+                                {user.bankBranch?.nombre ?? '-'}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-on-surface-variant">
+                                {roleLabels[user.role] ?? user.role}
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="px-6 py-4 text-sm text-on-surface-variant">
+                                {user.brand?.nombre ?? merchantBrand ?? '-'}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-on-surface-variant">
+                                {user.merchant?.nombre ?? '-'}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-on-surface-variant">
+                                {user.pointOfSale?.nombre ?? '-'}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-on-surface-variant">
+                                {roleLabels[user.role] ?? user.role}
+                              </td>
+                            </>
+                          )}
+                          <td className="px-6 py-4 text-center">
+                            <span
+                              className={`inline-block px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${statusPill(
+                                user.isActive,
+                              )}`}
                             >
-                              Ver
-                            </a>
-                            <button
-                              className="text-xs font-bold text-primary hover:underline"
-                              type="button"
-                              onClick={() => startEdit(user)}
-                            >
-                              Editar
-                            </button>
-                            {user.isActive ? (
-                              <button
-                                className="text-xs font-bold text-rose-500 hover:underline"
-                                type="button"
-                                onClick={() => deactivateUser(user)}
+                              {user.isActive ? 'Activo' : 'Inactivo'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-on-surface-variant">
+                            {user.lastLoginAt ? dateTimeFormatter.format(new Date(user.lastLoginAt)) : '-'}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-3">
+                              <a
+                                className="text-xs font-bold text-primary hover:underline"
+                                href={`/superadmin/users/${user.id}?bankId=${selectedBankId}`}
                               >
-                                Desactivar
+                                Ver
+                              </a>
+                              <button
+                                className="text-xs font-bold text-primary hover:underline"
+                                type="button"
+                                onClick={() => startEdit(user)}
+                              >
+                                Editar
                               </button>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                              {user.isActive ? (
+                                <button
+                                  className="text-xs font-bold text-rose-500 hover:underline"
+                                  type="button"
+                                  onClick={() => deactivateUser(user)}
+                                >
+                                  Desactivar
+                                </button>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

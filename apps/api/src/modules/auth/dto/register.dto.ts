@@ -26,5 +26,13 @@ export class RegisterDto {
 
   @IsOptional()
   @IsString()
+  brandId?: string;
+
+  @IsOptional()
+  @IsString()
   merchantId?: string;
+
+  @IsOptional()
+  @IsString()
+  pointOfSaleId?: string;
 }

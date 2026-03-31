@@ -20,9 +20,17 @@ export class UpdateUserDto {
 
   @IsOptional()
   @IsString()
+  brandId?: string;
+
+  @IsOptional()
+  @IsString()
   merchantId?: string;
 
   @IsOptional()
   @IsString()
   bankBranchId?: string;
+
+  @IsOptional()
+  @IsString()
+  pointOfSaleId?: string;
 }

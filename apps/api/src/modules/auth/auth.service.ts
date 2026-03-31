@@ -29,16 +29,20 @@ export class AuthService {
     tenantId: string;
     role: Role;
     email: string;
+    brandId?: string | null;
     merchantId?: string | null;
     bankBranchId?: string | null;
+    pointOfSaleId?: string | null;
   }): JwtPayload {
     return {
       sub: user.id,
       tenantId: user.tenantId,
       role: user.role,
       email: user.email,
+      brandId: user.brandId ?? undefined,
       merchantId: user.merchantId ?? undefined,
       bankBranchId: user.bankBranchId ?? undefined,
+      pointOfSaleId: user.pointOfSaleId ?? undefined,
     };
   }
 
@@ -48,8 +52,10 @@ export class AuthService {
     role: Role;
     email: string;
     nombre: string;
+    brandId?: string | null;
     merchantId?: string | null;
     bankBranchId?: string | null;
+    pointOfSaleId?: string | null;
   }) {
     await this.prisma.user.update({
       where: { id: user.id },
@@ -66,7 +72,10 @@ export class AuthService {
         email: user.email,
         role: user.role,
         tenantId: user.tenantId,
+        brandId: user.brandId ?? null,
         bankBranchId: user.bankBranchId ?? null,
+        merchantId: user.merchantId ?? null,
+        pointOfSaleId: user.pointOfSaleId ?? null,
       },
     };
   }
@@ -169,24 +178,78 @@ export class AuthService {
       role: user.role,
       email: user.email,
       nombre: user.nombre,
+      brandId: user.brandId,
       merchantId: user.merchantId,
       bankBranchId: user.bankBranchId,
+      pointOfSaleId: user.pointOfSaleId,
     });
   }
 
-  async register(dto: RegisterDto, tenantId: string, actorRole: Role) {
+  async register(
+    dto: RegisterDto,
+    actor: {
+      tenantId: string;
+      role: Role;
+      bankBranchId?: string | null;
+      brandId?: string | null;
+      merchantId?: string | null;
+      pointOfSaleId?: string | null;
+    },
+  ) {
+    const actorRole = actor.role;
+    const tenantId = actor.tenantId;
+    if (actorRole === Role.BANK_BRANCH_MANAGER) {
+      const allowed = new Set<Role>([Role.BANK_BRANCH_MANAGER, Role.BANK_BRANCH_OPERATOR]);
+      if (!allowed.has(dto.role)) {
+        throw new ForbiddenException('No autorizado para crear usuarios fuera de la sucursal bancaria');
+      }
+    }
+    if (actorRole === Role.BRAND_ADMIN) {
+      const allowed = new Set<Role>([Role.BRAND_ADMIN, Role.LEGAL_ENTITY_ADMIN, Role.POS_ADMIN, Role.MERCHANT_ADMIN, Role.MERCHANT_USER]);
+      if (!allowed.has(dto.role)) {
+        throw new ForbiddenException('No autorizado para crear usuarios fuera de la marca');
+      }
+    }
+    if (actorRole === Role.LEGAL_ENTITY_ADMIN || actorRole === Role.MERCHANT_ADMIN || actorRole === Role.MERCHANT_USER) {
+      const allowed = new Set<Role>([Role.LEGAL_ENTITY_ADMIN, Role.POS_ADMIN, Role.MERCHANT_ADMIN, Role.MERCHANT_USER]);
+      if (!allowed.has(dto.role)) {
+        throw new ForbiddenException('No autorizado para crear usuarios fuera de la razon social');
+      }
+    }
     if (dto.role === Role.SUPERADMIN && actorRole !== Role.SUPERADMIN) {
       throw new ForbiddenException('No autorizado para crear SuperAdmin');
     }
     if (dto.tenantId && actorRole !== Role.SUPERADMIN) {
       throw new ForbiddenException('No autorizado para definir banco');
     }
-    const branchRoles: Role[] = [Role.BANK_BRANCH_MANAGER, Role.BANK_BRANCH_OPERATOR];
-    if (branchRoles.includes(dto.role) && !dto.bankBranchId) {
+    const branchRoles = new Set<Role>([Role.BANK_BRANCH_MANAGER, Role.BANK_BRANCH_OPERATOR]);
+    const brandRoles = new Set<Role>([Role.BRAND_ADMIN]);
+    const legalEntityRoles = new Set<Role>([Role.LEGAL_ENTITY_ADMIN, Role.MERCHANT_ADMIN, Role.MERCHANT_USER]);
+    const posRoles = new Set<Role>([Role.POS_ADMIN]);
+
+    if (branchRoles.has(dto.role) && !dto.bankBranchId) {
       throw new BadRequestException('La sucursal bancaria es obligatoria para este rol');
     }
-    if (dto.bankBranchId && !branchRoles.includes(dto.role)) {
+    if (dto.bankBranchId && !branchRoles.has(dto.role)) {
       throw new BadRequestException('La sucursal bancaria solo aplica a roles de sucursal');
+    }
+    if (brandRoles.has(dto.role) && !dto.brandId) {
+      throw new BadRequestException('La marca es obligatoria para este rol');
+    }
+    if (dto.brandId && !brandRoles.has(dto.role)) {
+      throw new BadRequestException('La marca solo aplica a roles de marca');
+    }
+    if (legalEntityRoles.has(dto.role) && !dto.merchantId) {
+      throw new BadRequestException('La razon social es obligatoria para este rol');
+    }
+    if (dto.merchantId && !legalEntityRoles.has(dto.role) && !posRoles.has(dto.role)) {
+      throw new BadRequestException('La razon social solo aplica a roles comerciales');
+    }
+    if (posRoles.has(dto.role) && !dto.pointOfSaleId) {
+      throw new BadRequestException('El punto de venta es obligatorio para este rol');
+    }
+    if (dto.pointOfSaleId && !posRoles.has(dto.role)) {
+      throw new BadRequestException('El punto de venta solo aplica a roles de PDV');
     }
     const targetTenantId =
       dto.role === Role.SUPERADMIN
@@ -194,6 +257,37 @@ export class AuthService {
         : actorRole === Role.SUPERADMIN && dto.tenantId
           ? dto.tenantId
           : tenantId;
+
+    if (actorRole === Role.BANK_BRANCH_MANAGER) {
+      if (!actor.bankBranchId) {
+        throw new ForbiddenException('Sucursal bancaria no configurada para el usuario');
+      }
+      if (dto.bankBranchId && dto.bankBranchId !== actor.bankBranchId) {
+        throw new ForbiddenException('No autorizado para asignar otra sucursal bancaria');
+      }
+      dto.bankBranchId = actor.bankBranchId;
+    }
+    if (actorRole === Role.BRAND_ADMIN) {
+      if (!actor.brandId) {
+        throw new ForbiddenException('Marca no configurada para el usuario');
+      }
+      if (dto.brandId && dto.brandId !== actor.brandId) {
+        throw new ForbiddenException('No autorizado para asignar otra marca');
+      }
+      dto.brandId = actor.brandId;
+    }
+    if (actorRole === Role.LEGAL_ENTITY_ADMIN || actorRole === Role.MERCHANT_ADMIN || actorRole === Role.MERCHANT_USER) {
+      if (!actor.merchantId) {
+        throw new ForbiddenException('Razon social no configurada para el usuario');
+      }
+      if (dto.merchantId && dto.merchantId !== actor.merchantId) {
+        throw new ForbiddenException('No autorizado para asignar otra razon social');
+      }
+      dto.merchantId = actor.merchantId;
+    }
+    if (actorRole === Role.POS_ADMIN) {
+      throw new ForbiddenException('No autorizado para crear usuarios desde un PDV');
+    }
 
     if (actorRole === Role.SUPERADMIN && dto.tenantId && dto.tenantId !== tenantId) {
       const bank = await this.prisma.bank.findUnique({ where: { id: dto.tenantId } });
@@ -207,6 +301,29 @@ export class AuthService {
         throw new BadRequestException('Sucursal bancaria invalida');
       }
     }
+    if (dto.brandId) {
+      const brand = await this.prisma.brand.findUnique({ where: { id: dto.brandId } });
+      if (!brand || brand.tenantId !== targetTenantId) {
+        throw new BadRequestException('Marca invalida');
+      }
+    }
+    if (dto.merchantId) {
+      const merchant = await this.prisma.merchant.findUnique({ where: { id: dto.merchantId } });
+      if (!merchant || merchant.tenantId !== targetTenantId) {
+        throw new BadRequestException('Razon social invalida');
+      }
+    }
+    let resolvedMerchantId = dto.merchantId ?? null;
+    if (dto.pointOfSaleId) {
+      const pointOfSale = await this.prisma.branch.findUnique({ where: { id: dto.pointOfSaleId } });
+      if (!pointOfSale || pointOfSale.tenantId !== targetTenantId) {
+        throw new BadRequestException('Punto de venta invalido');
+      }
+      resolvedMerchantId = pointOfSale.merchantId;
+      if (dto.merchantId && dto.merchantId !== pointOfSale.merchantId) {
+        throw new BadRequestException('El punto de venta no pertenece a la razon social indicada');
+      }
+    }
     const passwordHash = await bcrypt.hash(dto.password, 10);
     const user = await this.prisma.user.create({
       data: {
@@ -215,8 +332,10 @@ export class AuthService {
         passwordHash,
         nombre: dto.nombre,
         role: dto.role,
-        merchantId: dto.merchantId ?? null,
-        bankBranchId: dto.bankBranchId ?? null,
+        brandId: brandRoles.has(dto.role) ? dto.brandId ?? null : null,
+        merchantId: legalEntityRoles.has(dto.role) || posRoles.has(dto.role) ? resolvedMerchantId : null,
+        bankBranchId: branchRoles.has(dto.role) ? dto.bankBranchId ?? null : null,
+        pointOfSaleId: posRoles.has(dto.role) ? dto.pointOfSaleId ?? null : null,
       },
     });
 
@@ -249,8 +368,10 @@ export class AuthService {
         email: true,
         role: true,
         tenantId: true,
+        brandId: true,
         merchantId: true,
         bankBranchId: true,
+        pointOfSaleId: true,
         lastLoginAt: true,
         twoFactorEmailEnabled: true,
         twoFactorTotpEnabled: true,
@@ -276,8 +397,10 @@ export class AuthService {
           email: true,
           role: true,
           tenantId: true,
+          brandId: true,
           merchantId: true,
           bankBranchId: true,
+          pointOfSaleId: true,
           lastLoginAt: true,
         },
       });
@@ -503,8 +626,10 @@ export class AuthService {
       role: user.role,
       email: user.email,
       nombre: user.nombre,
+      brandId: user.brandId,
       merchantId: user.merchantId,
       bankBranchId: user.bankBranchId,
+      pointOfSaleId: user.pointOfSaleId,
     });
   }
 

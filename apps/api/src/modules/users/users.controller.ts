@@ -22,48 +22,121 @@ import { FileInterceptor } from '@nestjs/platform-express';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.BANK_ADMIN)
+@Roles(
+  Role.BANK_ADMIN,
+  Role.BANK_BRANCH_MANAGER,
+  Role.BRAND_ADMIN,
+  Role.LEGAL_ENTITY_ADMIN,
+  Role.MERCHANT_ADMIN,
+  Role.MERCHANT_USER,
+)
 export class UsersController {
   constructor(private usersService: UsersService) {}
 
   @Get()
   async list(
-    @CurrentUser() user: { tenantId: string; role: Role },
+    @CurrentUser() user: {
+      tenantId: string;
+      role: Role;
+      bankBranchId?: string | null;
+      brandId?: string | null;
+      merchantId?: string | null;
+      pointOfSaleId?: string | null;
+    },
     @Query('bankId') bankId?: string,
   ) {
     const resolvedTenantId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
-    return this.usersService.list(resolvedTenantId);
+    return this.usersService.list(resolvedTenantId, {
+      role: user.role,
+      bankBranchId: user.bankBranchId,
+      brandId: user.brandId,
+      merchantId: user.merchantId,
+      pointOfSaleId: user.pointOfSaleId,
+    });
   }
 
   @Get(':id')
   async get(
     @Param('id') id: string,
-    @CurrentUser() user: { tenantId: string; role: Role },
+    @CurrentUser() user: {
+      tenantId: string;
+      role: Role;
+      bankBranchId?: string | null;
+      brandId?: string | null;
+      merchantId?: string | null;
+      pointOfSaleId?: string | null;
+    },
     @Query('bankId') bankId?: string,
   ) {
     const resolvedTenantId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
-    return this.usersService.get(resolvedTenantId, id);
+    return this.usersService.get(resolvedTenantId, id, {
+      role: user.role,
+      bankBranchId: user.bankBranchId,
+      brandId: user.brandId,
+      merchantId: user.merchantId,
+      pointOfSaleId: user.pointOfSaleId,
+    });
   }
 
   @Patch(':id')
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
-    @CurrentUser() user: { tenantId: string; userId: string; role: Role },
+    @CurrentUser() user: {
+      tenantId: string;
+      userId: string;
+      role: Role;
+      bankBranchId?: string | null;
+      brandId?: string | null;
+      merchantId?: string | null;
+      pointOfSaleId?: string | null;
+    },
     @Query('bankId') bankId?: string,
   ) {
     const resolvedTenantId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
-    return this.usersService.update(resolvedTenantId, id, dto, user.userId, user.role);
+    return this.usersService.update(
+      resolvedTenantId,
+      id,
+      dto,
+      {
+        role: user.role,
+        bankBranchId: user.bankBranchId,
+        brandId: user.brandId,
+        merchantId: user.merchantId,
+        pointOfSaleId: user.pointOfSaleId,
+      },
+      user.userId,
+      user.role,
+    );
   }
 
   @Delete(':id')
   async remove(
     @Param('id') id: string,
-    @CurrentUser() user: { tenantId: string; userId: string; role: Role },
+    @CurrentUser() user: {
+      tenantId: string;
+      userId: string;
+      role: Role;
+      bankBranchId?: string | null;
+      brandId?: string | null;
+      merchantId?: string | null;
+      pointOfSaleId?: string | null;
+    },
     @Query('bankId') bankId?: string,
   ) {
     const resolvedTenantId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
-    return this.usersService.deactivate(resolvedTenantId, id, user.userId);
+    return this.usersService.deactivate(
+      resolvedTenantId,
+      id,
+      {
+        role: user.role,
+        bankBranchId: user.bankBranchId,
+        brandId: user.brandId,
+        merchantId: user.merchantId,
+        pointOfSaleId: user.pointOfSaleId,
+      },
+      user.userId,
+    );
   }
 
   @Post('import')

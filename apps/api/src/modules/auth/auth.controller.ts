@@ -100,12 +100,27 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.BANK_ADMIN, Role.SUPERADMIN)
+  @Roles(
+    Role.SUPERADMIN,
+    Role.BANK_ADMIN,
+    Role.BANK_BRANCH_MANAGER,
+    Role.BRAND_ADMIN,
+    Role.LEGAL_ENTITY_ADMIN,
+    Role.MERCHANT_ADMIN,
+    Role.MERCHANT_USER,
+  )
   @Post('registro')
   async register(
     @Body() dto: RegisterDto,
-    @CurrentUser() user: { tenantId: string; role: Role },
+    @CurrentUser() user: {
+      tenantId: string;
+      role: Role;
+      bankBranchId?: string | null;
+      brandId?: string | null;
+      merchantId?: string | null;
+      pointOfSaleId?: string | null;
+    },
   ) {
-    return this.authService.register(dto, user.tenantId, user.role);
+    return this.authService.register(dto, user);
   }
 }

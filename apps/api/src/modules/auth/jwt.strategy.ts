@@ -20,8 +20,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       tenantId: payload.tenantId,
       role: payload.role,
       email: payload.email,
+      brandId: payload.brandId ?? null,
       merchantId: payload.merchantId ?? null,
       bankBranchId: payload.bankBranchId ?? null,
+      pointOfSaleId: payload.pointOfSaleId ?? null,
     };
   }
 }

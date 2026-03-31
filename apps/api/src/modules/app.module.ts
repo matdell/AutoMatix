@@ -8,6 +8,7 @@ import { BankBranchesModule } from './bank-branches/bank-branches.module';
 import { MerchantsModule } from './merchants/merchants.module';
 import { BranchesModule } from './branches/branches.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
+import { BrandsModule } from './brands/brands.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { ValidationModule } from './validation/validation.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -27,6 +28,7 @@ import { DocusignModule } from './docusign/docusign.module';
     MerchantsModule,
     BranchesModule,
     CampaignsModule,
+    BrandsModule,
     InvitationsModule,
     ValidationModule,
     NotificationsModule,

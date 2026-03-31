@@ -14,6 +14,9 @@ enum Role {
   BANK_APPROVER
   BANK_BRANCH_MANAGER
   BANK_BRANCH_OPERATOR
+  BRAND_ADMIN
+  LEGAL_ENTITY_ADMIN
+  POS_ADMIN
   MERCHANT_ADMIN
   MERCHANT_USER
   ADMIN
@@ -76,6 +79,7 @@ model Bank {
   updatedAt      DateTime @updatedAt
 
   users          User[]
+  brands         Brand[]
   bankBranches   BankBranch[]
   merchants      Merchant[]
   branches       Branch[]
@@ -112,8 +116,10 @@ model User {
   passwordHash  String
   nombre        String
   role          Role
+  brandId       String?
   merchantId    String?
   bankBranchId  String?
+  pointOfSaleId String?
   isActive      Boolean  @default(true)
   twoFactorEmailEnabled Boolean @default(false)
   twoFactorTotpEnabled  Boolean @default(false)
@@ -122,8 +128,10 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  brand         Brand?     @relation(fields: [brandId], references: [id])
   merchant      Merchant? @relation(fields: [merchantId], references: [id])
   bankBranch    BankBranch? @relation(fields: [bankBranchId], references: [id])
+  pointOfSale   Branch?    @relation("UserPointOfSale", fields: [pointOfSaleId], references: [id])
   auditLogs     AuditLog[]
   archivedCampaigns Campaign[] @relation("CampaignArchivedBy")
   passwordResetTokens PasswordResetToken[]
@@ -132,6 +140,40 @@ model User {
   @@unique([tenantId, email])
   @@index([tenantId])
   @@index([bankBranchId])
+  @@index([brandId])
+  @@index([merchantId])
+  @@index([pointOfSaleId])
+}
+
+model Brand {
+  id        String   @id @default(cuid())
+  tenantId  String
+  bank      Bank     @relation(fields: [tenantId], references: [id])
+  nombre    String
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  legalEntities BrandLegalEntity[]
+  users        User[]
+
+  @@index([tenantId])
+}
+
+model BrandLegalEntity {
+  id         String   @id @default(cuid())
+  tenantId   String
+  brandId    String
+  merchantId String
+  createdAt  DateTime @default(now())
+
+  brand      Brand    @relation(fields: [brandId], references: [id])
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+
+  @@unique([brandId, merchantId])
+  @@index([tenantId])
+  @@index([brandId])
+  @@index([merchantId])
 }
 
 model Merchant {
@@ -149,6 +191,7 @@ model Merchant {
   updatedAt     DateTime       @updatedAt
 
   branches      Branch[]
+  brands        BrandLegalEntity[]
   campaigns     CampaignMerchant[]
   invitations   Invitation[]
   validations   ValidationError[]
@@ -176,6 +219,7 @@ model Branch {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  users         User[]   @relation("UserPointOfSale")
   campaignLinks CampaignMerchant[]
   invitationLinks InvitationBranch[]
 

@@ -9,8 +9,10 @@ type RequestUser = {
   tenantId: string;
   role: JwtPayload['role'];
   email: string;
+  brandId?: string | null;
   merchantId?: string | null;
   bankBranchId?: string | null;
+  pointOfSaleId?: string | null;
 };
 
 @Injectable()
@@ -34,8 +36,10 @@ export class JwtRefreshInterceptor implements NestInterceptor {
           tenantId: user.tenantId,
           role: user.role,
           email: user.email,
+          brandId: user.brandId ?? undefined,
           merchantId: user.merchantId ?? undefined,
           bankBranchId: user.bankBranchId ?? undefined,
+          pointOfSaleId: user.pointOfSaleId ?? undefined,
         };
         const token = this.jwtService.sign(payload);
         response.setHeader('x-access-token', token);

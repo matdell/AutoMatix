@@ -12,15 +12,40 @@ type BankBranch = {
   localidad?: string | null;
 };
 
+type Brand = {
+  id: string;
+  nombre: string;
+  activo?: boolean;
+};
+
+type Merchant = {
+  id: string;
+  nombre: string;
+  cuit?: string | null;
+  brands?: { brand: { id: string; nombre: string } }[];
+};
+
+type PointOfSale = {
+  id: string;
+  nombre: string;
+  direccion?: string | null;
+  ciudad?: string | null;
+};
+
 type User = {
   id: string;
   nombre: string;
   email: string;
   role: string;
+  brandId?: string | null;
   merchantId?: string | null;
   bankBranchId?: string | null;
+  pointOfSaleId?: string | null;
   bank?: { id: string; nombre: string; slug: string } | null;
   bankBranch?: { id: string; nombre: string; codigo?: string | null; localidad?: string | null } | null;
+  brand?: { id: string; nombre: string } | null;
+  merchant?: Merchant | null;
+  pointOfSale?: PointOfSale | null;
   isActive: boolean;
   lastLoginAt?: string | null;
 };
@@ -32,6 +57,9 @@ const roleLabels: Record<string, string> = {
   BANK_APPROVER: 'Aprobador Banco',
   BANK_BRANCH_MANAGER: 'Sucursal (Manager)',
   BANK_BRANCH_OPERATOR: 'Sucursal (Operador)',
+  BRAND_ADMIN: 'Admin Marca',
+  LEGAL_ENTITY_ADMIN: 'Admin Razon Social',
+  POS_ADMIN: 'Admin PDV',
   MERCHANT_ADMIN: 'Admin Comercio',
   MERCHANT_USER: 'Usuario Comercio',
 };
@@ -43,12 +71,17 @@ const roleOptions = [
   'BANK_APPROVER',
   'BANK_BRANCH_MANAGER',
   'BANK_BRANCH_OPERATOR',
+  'BRAND_ADMIN',
+  'LEGAL_ENTITY_ADMIN',
+  'POS_ADMIN',
   'MERCHANT_ADMIN',
   'MERCHANT_USER',
 ];
 
 const branchRoles = new Set(['BANK_BRANCH_MANAGER', 'BANK_BRANCH_OPERATOR']);
-const merchantRoles = new Set(['MERCHANT_ADMIN', 'MERCHANT_USER']);
+const brandRoles = new Set(['BRAND_ADMIN']);
+const legalEntityRoles = new Set(['LEGAL_ENTITY_ADMIN', 'MERCHANT_ADMIN', 'MERCHANT_USER']);
+const pointOfSaleRoles = new Set(['POS_ADMIN']);
 
 export default function SuperAdminUserDetailPage() {
   const router = useRouter();
@@ -60,6 +93,9 @@ export default function SuperAdminUserDetailPage() {
   const [bankId, setBankId] = useState('');
   const [user, setUser] = useState<User | null>(null);
   const [bankBranches, setBankBranches] = useState<BankBranch[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [merchants, setMerchants] = useState<Merchant[]>([]);
+  const [pointsOfSale, setPointsOfSale] = useState<PointOfSale[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,13 +104,17 @@ export default function SuperAdminUserDetailPage() {
   const [userNombre, setUserNombre] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userRole, setUserRole] = useState('BANK_ADMIN');
+  const [userBrandId, setUserBrandId] = useState('');
   const [userMerchantId, setUserMerchantId] = useState('');
   const [userBankBranchId, setUserBankBranchId] = useState('');
+  const [userPointOfSaleId, setUserPointOfSaleId] = useState('');
   const [userActive, setUserActive] = useState(true);
 
   const isSuperAdmin = role === 'SUPERADMIN';
   const needsBranch = branchRoles.has(userRole);
-  const isMerchantRole = merchantRoles.has(userRole);
+  const isBrandRole = brandRoles.has(userRole);
+  const isLegalEntityRole = legalEntityRoles.has(userRole);
+  const isPointOfSaleRole = pointOfSaleRoles.has(userRole);
 
   const dateTimeFormatter = useMemo(
     () =>
@@ -83,6 +123,29 @@ export default function SuperAdminUserDetailPage() {
         timeStyle: 'short',
       }),
     [],
+  );
+
+  const brandOptions = useMemo(
+    () => brands.map((brand) => ({ value: brand.id, label: brand.nombre })),
+    [brands],
+  );
+
+  const merchantOptions = useMemo(
+    () =>
+      merchants.map((merchant) => ({
+        value: merchant.id,
+        label: merchant.cuit ? `${merchant.nombre} · ${merchant.cuit}` : merchant.nombre,
+      })),
+    [merchants],
+  );
+
+  const pointOfSaleOptions = useMemo(
+    () =>
+      pointsOfSale.map((pos) => ({
+        value: pos.id,
+        label: pos.ciudad ? `${pos.nombre} · ${pos.ciudad}` : pos.nombre,
+      })),
+    [pointsOfSale],
   );
 
   useEffect(() => {
@@ -116,6 +179,39 @@ export default function SuperAdminUserDetailPage() {
     }
   };
 
+  const loadBrands = async (resolvedBankId: string) => {
+    if (!resolvedBankId) return;
+    try {
+      const data = await apiJson<Brand[]>(`/brands?bankId=${resolvedBankId}`);
+      setBrands(data);
+    } catch {
+      setBrands([]);
+    }
+  };
+
+  const loadMerchants = async (resolvedBankId: string) => {
+    if (!resolvedBankId) return;
+    try {
+      const data = await apiJson<Merchant[]>(`/merchants?bankId=${resolvedBankId}`);
+      setMerchants(data);
+    } catch {
+      setMerchants([]);
+    }
+  };
+
+  const loadPointsOfSale = async (merchantId: string) => {
+    if (!merchantId) {
+      setPointsOfSale([]);
+      return;
+    }
+    try {
+      const data = await apiJson<PointOfSale[]>(`/merchants/${merchantId}/branches`);
+      setPointsOfSale(data);
+    } catch {
+      setPointsOfSale([]);
+    }
+  };
+
   const loadUser = async (resolvedBankId: string) => {
     setLoading(true);
     setError(null);
@@ -126,8 +222,10 @@ export default function SuperAdminUserDetailPage() {
       setUserNombre(data.nombre || '');
       setUserEmail(data.email || '');
       setUserRole(data.role || 'BANK_ADMIN');
+      setUserBrandId(data.brandId || '');
       setUserMerchantId(data.merchantId || '');
       setUserBankBranchId(data.bankBranchId || '');
+      setUserPointOfSaleId(data.pointOfSaleId || '');
       setUserActive(Boolean(data.isActive));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar el usuario');
@@ -141,7 +239,23 @@ export default function SuperAdminUserDetailPage() {
     if (!bankId) return;
     loadUser(bankId);
     loadBranches(bankId);
+    loadBrands(bankId);
+    loadMerchants(bankId);
   }, [isSuperAdmin, bankId]);
+
+  useEffect(() => {
+    if (!isPointOfSaleRole) {
+      setPointsOfSale([]);
+      setUserPointOfSaleId('');
+      return;
+    }
+    if (userMerchantId) {
+      loadPointsOfSale(userMerchantId);
+    } else {
+      setPointsOfSale([]);
+      setUserPointOfSaleId('');
+    }
+  }, [isPointOfSaleRole, userMerchantId]);
 
   const onSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -161,8 +275,20 @@ export default function SuperAdminUserDetailPage() {
       } else {
         payload.bankBranchId = '';
       }
-      if (isMerchantRole) {
+      if (isBrandRole) {
+        payload.brandId = userBrandId.trim() || undefined;
+      } else {
+        payload.brandId = '';
+      }
+      if (isLegalEntityRole || isPointOfSaleRole) {
         payload.merchantId = userMerchantId.trim() || undefined;
+      } else {
+        payload.merchantId = '';
+      }
+      if (isPointOfSaleRole) {
+        payload.pointOfSaleId = userPointOfSaleId.trim() || undefined;
+      } else {
+        payload.pointOfSaleId = '';
       }
       await apiJson(`/users/${user.id}?bankId=${bankId}`, {
         method: 'PATCH',
@@ -301,7 +427,9 @@ export default function SuperAdminUserDetailPage() {
                       </div>
                       {needsBranch ? (
                         <div>
-                          <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Sucursal</label>
+                          <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                            Sucursal bancaria
+                          </label>
                           <select
                             className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
                             value={userBankBranchId}
@@ -319,15 +447,63 @@ export default function SuperAdminUserDetailPage() {
                           </select>
                         </div>
                       ) : null}
-                      {isMerchantRole ? (
+                      {isBrandRole ? (
                         <div>
-                          <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Merchant ID</label>
-                          <input
+                          <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Marca</label>
+                          <select
+                            className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                            value={userBrandId}
+                            onChange={(event) => setUserBrandId(event.target.value)}
+                            required
+                          >
+                            <option value="">Selecciona una marca</option>
+                            {brandOptions.map((brand) => (
+                              <option key={brand.value} value={brand.value}>
+                                {brand.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : null}
+                      {isLegalEntityRole || isPointOfSaleRole ? (
+                        <div>
+                          <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                            Razon social
+                          </label>
+                          <select
                             className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
                             value={userMerchantId}
                             onChange={(event) => setUserMerchantId(event.target.value)}
-                            placeholder="merchantId"
-                          />
+                            required={isLegalEntityRole || isPointOfSaleRole}
+                          >
+                            <option value="">Selecciona una razon social</option>
+                            {merchantOptions.map((merchant) => (
+                              <option key={merchant.value} value={merchant.value}>
+                                {merchant.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : null}
+                      {isPointOfSaleRole ? (
+                        <div>
+                          <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                            Punto de venta
+                          </label>
+                          <select
+                            className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                            value={userPointOfSaleId}
+                            onChange={(event) => setUserPointOfSaleId(event.target.value)}
+                            required
+                            disabled={!userMerchantId}
+                          >
+                            <option value="">Selecciona un PDV</option>
+                            {pointOfSaleOptions.map((pos) => (
+                              <option key={pos.value} value={pos.value}>
+                                {pos.label}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       ) : null}
                     </div>
