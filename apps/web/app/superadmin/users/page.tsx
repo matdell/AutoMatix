@@ -80,6 +80,10 @@ export default function SuperAdminUsersPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
+  const [userPageSize, setUserPageSize] = useState(25);
+  const [userPage, setUserPage] = useState(1);
+  const [userFilter, setUserFilter] = useState<'all' | 'bank' | 'merchant' | 'branch'>('all');
+
   const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [userNombre, setUserNombre] = useState('');
@@ -172,6 +176,38 @@ export default function SuperAdminUsersPage() {
     loadUsers(selectedBankId);
     loadBranches(selectedBankId);
   }, [isSuperAdmin, selectedBankId]);
+
+  useEffect(() => {
+    if (userPage > 1) {
+      setUserPage(1);
+    }
+  }, [userFilter, userPageSize]);
+
+  const filteredUsers = useMemo(() => {
+    switch (userFilter) {
+      case 'bank':
+        return users.filter((user) => !user.merchantId && !user.bankBranchId);
+      case 'merchant':
+        return users.filter((user) => Boolean(user.merchantId));
+      case 'branch':
+        return users.filter((user) => Boolean(user.bankBranchId));
+      default:
+        return users;
+    }
+  }, [users, userFilter]);
+
+  const paginatedUsers = useMemo(() => {
+    const start = (userPage - 1) * userPageSize;
+    return filteredUsers.slice(start, start + userPageSize);
+  }, [filteredUsers, userPage, userPageSize]);
+
+  const totalUserPages = Math.max(1, Math.ceil(filteredUsers.length / userPageSize));
+
+  useEffect(() => {
+    if (userPage > 1 && (userPage - 1) * userPageSize >= filteredUsers.length) {
+      setUserPage(1);
+    }
+  }, [filteredUsers.length, userPage, userPageSize]);
 
   const resetForm = () => {
     setUserNombre('');
@@ -381,9 +417,9 @@ export default function SuperAdminUsersPage() {
                     Administra usuarios, roles y accesos por entidad bancaria.
                   </p>
                 </div>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
                   <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-                    Banco activo
+                    Banco
                   </label>
                   <select
                     className="bg-surface-container-low border-none rounded-xl px-4 py-2 text-sm"
@@ -393,6 +429,36 @@ export default function SuperAdminUsersPage() {
                     {bankOptions.map((bank) => (
                       <option key={bank.value} value={bank.value}>
                         {bank.label}
+                      </option>
+                    ))}
+                  </select>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                    Asociacion
+                  </label>
+                  <select
+                    className="bg-surface-container-low border-none rounded-xl px-4 py-2 text-sm"
+                    value={userFilter}
+                    onChange={(event) => setUserFilter(event.target.value as 'all' | 'bank' | 'merchant' | 'branch')}
+                  >
+                    <option value="all">Todos</option>
+                    <option value="bank">Banco</option>
+                    <option value="merchant">Comercio</option>
+                    <option value="branch">Sucursal</option>
+                  </select>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                    Registros por pagina
+                  </label>
+                  <select
+                    className="bg-surface-container-low border-none rounded-xl px-4 py-2 text-sm"
+                    value={userPageSize}
+                    onChange={(event) => {
+                      setUserPageSize(Number(event.target.value));
+                      setUserPage(1);
+                    }}
+                  >
+                    {[25, 50, 100].map((size) => (
+                      <option key={size} value={size}>
+                        {size}
                       </option>
                     ))}
                   </select>
@@ -589,14 +655,14 @@ export default function SuperAdminUsersPage() {
                         </td>
                       </tr>
                     ) : null}
-                    {!loading && users.length === 0 ? (
+                    {!loading && filteredUsers.length === 0 ? (
                       <tr>
                         <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={8}>
-                          No hay usuarios cargados para este banco.
+                          No hay usuarios para este filtro.
                         </td>
                       </tr>
                     ) : null}
-                    {users.map((user) => (
+                    {paginatedUsers.map((user) => (
                       <tr key={user.id} className="hover:bg-surface-container-low transition-colors group">
                         <td className="px-6 py-4">
                           <div className="text-sm font-semibold text-on-surface">{user.nombre}</div>
@@ -654,6 +720,30 @@ export default function SuperAdminUsersPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-xs text-on-surface-variant">
+                  Pagina {userPage} de {totalUserPages}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                    type="button"
+                    onClick={() => setUserPage((prev) => Math.max(1, prev - 1))}
+                    disabled={userPage === 1}
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                    type="button"
+                    onClick={() => setUserPage((prev) => Math.min(totalUserPages, prev + 1))}
+                    disabled={userPage === totalUserPages}
+                  >
+                    Siguiente
+                  </button>
+                </div>
               </div>
             </section>
           </>

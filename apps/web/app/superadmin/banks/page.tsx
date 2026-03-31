@@ -75,6 +75,7 @@ export default function SuperAdminBanksPage() {
 
   const [pageSize, setPageSize] = useState(25);
   const [page, setPage] = useState(1);
+  const [bankStatusFilter, setBankStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
   const [showBankModal, setShowBankModal] = useState(false);
   const [showEditBankModal, setShowEditBankModal] = useState(false);
@@ -191,10 +192,8 @@ export default function SuperAdminBanksPage() {
   }, [selectedBankId]);
 
   useEffect(() => {
-    if (page > 1 && (page - 1) * pageSize >= banks.length) {
-      setPage(1);
-    }
-  }, [banks.length, page, pageSize]);
+    setPage(1);
+  }, [bankStatusFilter, pageSize]);
 
   useEffect(() => {
     setSelectedBankIds((prev) => prev.filter((id) => banks.some((bank) => bank.id === id)));
@@ -442,12 +441,28 @@ export default function SuperAdminBanksPage() {
     setShowEditBranchModal(true);
   };
 
+  const filteredBanks = useMemo(() => {
+    if (bankStatusFilter === 'active') {
+      return banks.filter((bank) => bank.activo !== false);
+    }
+    if (bankStatusFilter === 'inactive') {
+      return banks.filter((bank) => bank.activo === false);
+    }
+    return banks;
+  }, [banks, bankStatusFilter]);
+
   const paginatedBanks = useMemo(() => {
     const start = (page - 1) * pageSize;
-    return banks.slice(start, start + pageSize);
-  }, [banks, page, pageSize]);
+    return filteredBanks.slice(start, start + pageSize);
+  }, [filteredBanks, page, pageSize]);
 
-  const totalPages = Math.max(1, Math.ceil(banks.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filteredBanks.length / pageSize));
+
+  useEffect(() => {
+    if (page > 1 && (page - 1) * pageSize >= filteredBanks.length) {
+      setPage(1);
+    }
+  }, [filteredBanks.length, page, pageSize]);
 
   const bankIdsOnPage = useMemo(() => paginatedBanks.map((bank) => bank.id), [paginatedBanks]);
   const allOnPageSelected =
@@ -511,6 +526,18 @@ export default function SuperAdminBanksPage() {
                   <p className="text-sm text-on-surface-variant">Datos principales y sucursales desplegables.</p>
                 </div>
                 <div className="flex items-center gap-3">
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                    Estado
+                  </label>
+                  <select
+                    className="bg-surface-container-low border-none rounded-xl px-4 py-2 text-sm"
+                    value={bankStatusFilter}
+                    onChange={(event) => setBankStatusFilter(event.target.value as 'all' | 'active' | 'inactive')}
+                  >
+                    <option value="all">Todos</option>
+                    <option value="active">Activos</option>
+                    <option value="inactive">Inactivos</option>
+                  </select>
                   <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
                     Registros por pagina
                   </label>
@@ -612,7 +639,7 @@ export default function SuperAdminBanksPage() {
                     {loadingBanks === false && paginatedBanks.length === 0 ? (
                       <tr>
                         <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={8}>
-                          No hay bancos cargados.
+                          No hay bancos para este filtro.
                         </td>
                       </tr>
                     ) : null}
