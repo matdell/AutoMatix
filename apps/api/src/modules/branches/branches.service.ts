@@ -18,11 +18,18 @@ export class BranchesService {
     return this.prisma.branch.findMany({
       where: { tenantId, merchantId },
       orderBy: { createdAt: 'desc' },
+      include: {
+        shopping: true,
+        establishments: true,
+      },
     });
   }
 
   async get(tenantId: string, id: string) {
-    const branch = await this.prisma.branch.findFirst({ where: { tenantId, id } });
+    const branch = await this.prisma.branch.findFirst({
+      where: { tenantId, id },
+      include: { shopping: true, establishments: true },
+    });
     if (!branch) {
       throw new NotFoundException('Sucursal no encontrada');
     }
@@ -59,6 +66,10 @@ export class BranchesService {
         merchantId,
         nombre: dto.nombre,
         direccion: dto.direccion,
+        calle: dto.calle,
+        numero: dto.numero,
+        piso: dto.piso,
+        codigoPostal: dto.codigoPostal,
         ciudad: dto.ciudad,
         provincia: dto.provincia,
         pais: dto.pais,
@@ -67,6 +78,7 @@ export class BranchesService {
         lng,
         merchantNumber: dto.merchantNumber,
         processor: dto.processor,
+        shoppingId: dto.shoppingId,
       },
     });
 
@@ -100,6 +112,10 @@ export class BranchesService {
       data: {
         nombre: dto.nombre ?? undefined,
         direccion: dto.direccion ?? undefined,
+        calle: dto.calle ?? undefined,
+        numero: dto.numero ?? undefined,
+        piso: dto.piso ?? undefined,
+        codigoPostal: dto.codigoPostal ?? undefined,
         ciudad: dto.ciudad ?? undefined,
         provincia: dto.provincia ?? undefined,
         pais: dto.pais ?? undefined,
@@ -108,6 +124,7 @@ export class BranchesService {
         lng: lng ?? undefined,
         merchantNumber: dto.merchantNumber ?? undefined,
         processor: dto.processor ?? undefined,
+        shoppingId: dto.shoppingId ?? undefined,
       },
     });
 

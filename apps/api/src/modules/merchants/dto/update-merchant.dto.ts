@@ -8,6 +8,10 @@ export class UpdateMerchantDto {
 
   @IsOptional()
   @IsString()
+  razonSocial?: string;
+
+  @IsOptional()
+  @IsString()
   categoria?: string;
 
   @IsOptional()
@@ -20,6 +24,10 @@ export class UpdateMerchantDto {
 
   @IsOptional()
   @IsString()
+  direccionSocial?: string;
+
+  @IsOptional()
+  @IsString()
   merchantNumber?: string;
 
   @IsOptional()
@@ -29,6 +37,10 @@ export class UpdateMerchantDto {
   @IsOptional()
   @IsString()
   telefono?: string;
+
+  @IsOptional()
+  @IsString()
+  processor?: string;
 
   @IsOptional()
   @IsArray()

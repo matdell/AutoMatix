@@ -6,6 +6,10 @@ export class CreateMerchantDto {
   @IsNotEmpty()
   nombre: string;
 
+  @IsOptional()
+  @IsString()
+  razonSocial?: string;
+
   @IsString()
   @IsNotEmpty()
   categoria: string;
@@ -20,6 +24,10 @@ export class CreateMerchantDto {
 
   @IsOptional()
   @IsString()
+  direccionSocial?: string;
+
+  @IsOptional()
+  @IsString()
   merchantNumber?: string;
 
   @IsOptional()
@@ -29,6 +37,10 @@ export class CreateMerchantDto {
   @IsOptional()
   @IsString()
   telefono?: string;
+
+  @IsOptional()
+  @IsString()
+  processor?: string;
 
   @IsOptional()
   @IsArray()

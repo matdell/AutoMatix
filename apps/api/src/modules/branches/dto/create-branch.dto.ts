@@ -9,6 +9,22 @@ export class CreateBranchDto {
   @IsNotEmpty()
   direccion: string;
 
+  @IsOptional()
+  @IsString()
+  calle?: string;
+
+  @IsOptional()
+  @IsString()
+  numero?: string;
+
+  @IsOptional()
+  @IsString()
+  piso?: string;
+
+  @IsOptional()
+  @IsString()
+  codigoPostal?: string;
+
   @IsString()
   @IsNotEmpty()
   ciudad: string;
@@ -40,4 +56,8 @@ export class CreateBranchDto {
   @IsOptional()
   @IsString()
   processor?: string;
+
+  @IsOptional()
+  @IsString()
+  shoppingId?: string;
 }

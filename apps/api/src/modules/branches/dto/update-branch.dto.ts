@@ -11,6 +11,22 @@ export class UpdateBranchDto {
 
   @IsOptional()
   @IsString()
+  calle?: string;
+
+  @IsOptional()
+  @IsString()
+  numero?: string;
+
+  @IsOptional()
+  @IsString()
+  piso?: string;
+
+  @IsOptional()
+  @IsString()
+  codigoPostal?: string;
+
+  @IsOptional()
+  @IsString()
   ciudad?: string;
 
   @IsOptional()
@@ -40,4 +56,8 @@ export class UpdateBranchDto {
   @IsOptional()
   @IsString()
   processor?: string;
+
+  @IsOptional()
+  @IsString()
+  shoppingId?: string;
 }

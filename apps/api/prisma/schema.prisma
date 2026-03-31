@@ -30,6 +30,15 @@ enum MerchantStatus {
   RESTRICTED
 }
 
+enum CardNetwork {
+  VISA
+  MASTERCARD
+  AMEX
+  CABAL
+  NARANJA
+  OTRA
+}
+
 enum CampaignType {
   DISCOUNT
   INSTALLMENTS
@@ -88,6 +97,9 @@ model Bank {
   bankBranches   BankBranch[]
   merchants      Merchant[]
   branches       Branch[]
+  categories     Category[]
+  shoppings      Shopping[]
+  branchEstablishments BranchEstablishment[]
   campaigns      Campaign[]
   invitations    Invitation[]
   validations    ValidationError[]
@@ -155,11 +167,20 @@ model Brand {
   tenantId  String
   bank      Bank     @relation(fields: [tenantId], references: [id])
   nombre    String
+  logoUrl   String?
+  sitioWeb  String?
+  facebook  String?
+  instagram String?
+  twitter   String?
+  emailPrincipal String?
+  telefonoPrincipal String?
+  processor String?
   activo    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   legalEntities BrandLegalEntity[]
+  categories   BrandCategory[]
   users        User[]
 
   @@index([tenantId])
@@ -181,17 +202,52 @@ model BrandLegalEntity {
   @@index([merchantId])
 }
 
+model Category {
+  id        String   @id @default(cuid())
+  tenantId  String
+  bank      Bank     @relation(fields: [tenantId], references: [id])
+  nombre    String
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  brands    BrandCategory[]
+
+  @@unique([tenantId, nombre])
+  @@index([tenantId])
+}
+
+model BrandCategory {
+  id         String   @id @default(cuid())
+  tenantId   String
+  brandId    String
+  categoryId String
+  createdAt  DateTime @default(now())
+
+  bank      Bank     @relation(fields: [tenantId], references: [id])
+  brand     Brand    @relation(fields: [brandId], references: [id])
+  category  Category @relation(fields: [categoryId], references: [id])
+
+  @@unique([brandId, categoryId])
+  @@index([tenantId])
+  @@index([brandId])
+  @@index([categoryId])
+}
+
 model Merchant {
   id            String         @id @default(cuid())
   tenantId      String
   bank          Bank           @relation(fields: [tenantId], references: [id])
   nombre        String
+  razonSocial   String?
   categoria     String
   estado        MerchantStatus @default(PENDING)
   cuit          String?
+  direccionSocial String?
   merchantNumber String?
   contactoEmail String?
   telefono      String?
+  processor     String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
@@ -213,6 +269,10 @@ model Branch {
   merchant      Merchant @relation(fields: [merchantId], references: [id])
   nombre        String
   direccion     String
+  calle         String?
+  numero        String?
+  piso          String?
+  codigoPostal  String?
   ciudad        String
   provincia     String
   pais          String
@@ -221,15 +281,49 @@ model Branch {
   lng           Float?
   merchantNumber String?
   processor     String?
+  shoppingId    String?
+  shopping      Shopping? @relation(fields: [shoppingId], references: [id])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   users         User[]   @relation("UserPointOfSale")
+  establishments BranchEstablishment[]
   campaignLinks CampaignMerchant[]
   invitationLinks InvitationBranch[]
 
   @@index([tenantId])
   @@index([merchantId])
+  @@index([shoppingId])
+}
+
+model Shopping {
+  id        String   @id @default(cuid())
+  tenantId  String
+  bank      Bank     @relation(fields: [tenantId], references: [id])
+  nombre    String
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches  Branch[]
+
+  @@unique([tenantId, nombre])
+  @@index([tenantId])
+}
+
+model BranchEstablishment {
+  id          String      @id @default(cuid())
+  tenantId    String
+  bank        Bank        @relation(fields: [tenantId], references: [id])
+  branchId    String
+  branch      Branch      @relation(fields: [branchId], references: [id])
+  cardNetwork CardNetwork
+  number      String
+  createdAt   DateTime    @default(now())
+
+  @@unique([branchId, cardNetwork])
+  @@index([tenantId])
+  @@index([branchId])
 }
 
 model Campaign {

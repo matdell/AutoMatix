@@ -21,6 +21,7 @@ type Brand = {
 type Merchant = {
   id: string;
   nombre: string;
+  razonSocial?: string | null;
   cuit?: string | null;
   brands?: { brand: { id: string; nombre: string } }[];
 };
@@ -134,7 +135,9 @@ export default function SuperAdminUserDetailPage() {
     () =>
       merchants.map((merchant) => ({
         value: merchant.id,
-        label: merchant.cuit ? `${merchant.nombre} · ${merchant.cuit}` : merchant.nombre,
+        label: merchant.cuit
+          ? `${merchant.razonSocial || merchant.nombre} · ${merchant.cuit}`
+          : merchant.razonSocial || merchant.nombre,
       })),
     [merchants],
   );

@@ -14,6 +14,7 @@ type Bank = {
 type Merchant = {
   id: string;
   nombre: string;
+  razonSocial?: string | null;
   cuit?: string | null;
 };
 
@@ -22,11 +23,27 @@ type BrandLegalEntity = {
   merchant: Merchant;
 };
 
+type BrandCategory = {
+  category: {
+    id: string;
+    nombre: string;
+  };
+};
+
 type Brand = {
   id: string;
   nombre: string;
+  logoUrl?: string | null;
+  sitioWeb?: string | null;
+  facebook?: string | null;
+  instagram?: string | null;
+  twitter?: string | null;
+  emailPrincipal?: string | null;
+  telefonoPrincipal?: string | null;
+  processor?: string | null;
   activo: boolean;
   legalEntities?: BrandLegalEntity[];
+  categories?: BrandCategory[];
   createdAt: string;
 };
 
@@ -74,6 +91,15 @@ export default function SuperAdminBrandsPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
   const [brandNombre, setBrandNombre] = useState('');
+  const [brandLogoUrl, setBrandLogoUrl] = useState('');
+  const [brandSitioWeb, setBrandSitioWeb] = useState('');
+  const [brandFacebook, setBrandFacebook] = useState('');
+  const [brandInstagram, setBrandInstagram] = useState('');
+  const [brandTwitter, setBrandTwitter] = useState('');
+  const [brandEmail, setBrandEmail] = useState('');
+  const [brandTelefono, setBrandTelefono] = useState('');
+  const [brandProcessor, setBrandProcessor] = useState('');
+  const [brandRubros, setBrandRubros] = useState('');
   const [brandActivo, setBrandActivo] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -82,6 +108,12 @@ export default function SuperAdminBrandsPage() {
   const [selectedMerchantId, setSelectedMerchantId] = useState('');
 
   const isSuperAdmin = role === 'SUPERADMIN';
+
+  const parseList = (value: string) =>
+    value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
 
   const bankOptions = useMemo(
     () => banks.map((bank) => ({ value: bank.id, label: `${bank.nombre} - ${bank.slug}` })),
@@ -92,7 +124,9 @@ export default function SuperAdminBrandsPage() {
     () =>
       merchants.map((merchant) => ({
         value: merchant.id,
-        label: merchant.cuit ? `${merchant.nombre} · ${merchant.cuit}` : merchant.nombre,
+        label: merchant.cuit
+          ? `${merchant.razonSocial || merchant.nombre} · ${merchant.cuit}`
+          : merchant.razonSocial || merchant.nombre,
       })),
     [merchants],
   );
@@ -163,6 +197,15 @@ export default function SuperAdminBrandsPage() {
 
   const openCreate = () => {
     setBrandNombre('');
+    setBrandLogoUrl('');
+    setBrandSitioWeb('');
+    setBrandFacebook('');
+    setBrandInstagram('');
+    setBrandTwitter('');
+    setBrandEmail('');
+    setBrandTelefono('');
+    setBrandProcessor('');
+    setBrandRubros('');
     setBrandActivo(true);
     setShowCreateModal(true);
   };
@@ -170,6 +213,15 @@ export default function SuperAdminBrandsPage() {
   const openEdit = (brand: Brand) => {
     setEditingBrand(brand);
     setBrandNombre(brand.nombre);
+    setBrandLogoUrl(brand.logoUrl ?? '');
+    setBrandSitioWeb(brand.sitioWeb ?? '');
+    setBrandFacebook(brand.facebook ?? '');
+    setBrandInstagram(brand.instagram ?? '');
+    setBrandTwitter(brand.twitter ?? '');
+    setBrandEmail(brand.emailPrincipal ?? '');
+    setBrandTelefono(brand.telefonoPrincipal ?? '');
+    setBrandProcessor(brand.processor ?? '');
+    setBrandRubros(brand.categories?.map((entry) => entry.category.nombre).join(', ') ?? '');
     setBrandActivo(brand.activo);
     setShowEditModal(true);
   };
@@ -181,16 +233,29 @@ export default function SuperAdminBrandsPage() {
     setError(null);
     setSuccess(null);
     try {
+      const payload = {
+        nombre: brandNombre.trim(),
+        logoUrl: brandLogoUrl.trim() || undefined,
+        sitioWeb: brandSitioWeb.trim() || undefined,
+        facebook: brandFacebook.trim() || undefined,
+        instagram: brandInstagram.trim() || undefined,
+        twitter: brandTwitter.trim() || undefined,
+        emailPrincipal: brandEmail.trim() || undefined,
+        telefonoPrincipal: brandTelefono.trim() || undefined,
+        processor: brandProcessor.trim() || undefined,
+        rubros: parseList(brandRubros),
+        activo: brandActivo,
+      };
       if (showCreateModal) {
         await apiJson(`/brands?bankId=${selectedBankId}`, {
           method: 'POST',
-          body: JSON.stringify({ nombre: brandNombre.trim(), activo: brandActivo }),
+          body: JSON.stringify(payload),
         });
         setSuccess('Marca creada correctamente.');
       } else if (showEditModal && editingBrand) {
         await apiJson(`/brands/${editingBrand.id}?bankId=${selectedBankId}`, {
           method: 'PATCH',
-          body: JSON.stringify({ nombre: brandNombre.trim(), activo: brandActivo }),
+          body: JSON.stringify(payload),
         });
         setSuccess('Marca actualizada correctamente.');
       }
@@ -370,12 +435,20 @@ export default function SuperAdminBrandsPage() {
                             {brand.nombre}
                           </div>
                           <div className="text-xs text-on-surface-variant">{brand.id.slice(0, 8)}</div>
+                          {brand.processor ? (
+                            <div className="text-xs text-on-surface-variant">Procesador: {brand.processor}</div>
+                          ) : null}
+                          {brand.categories && brand.categories.length > 0 ? (
+                            <div className="text-xs text-on-surface-variant">
+                              Rubros: {brand.categories.map((entry) => entry.category.nombre).join(', ')}
+                            </div>
+                          ) : null}
                           {expandedBrandId === brand.id && brand.legalEntities?.length ? (
                             <div className="mt-3 space-y-2">
                               {brand.legalEntities.map((link) => (
                                 <div key={link.merchantId} className="flex items-center justify-between text-xs">
                                   <span>
-                                    {link.merchant.nombre}
+                                    {link.merchant.razonSocial || link.merchant.nombre}
                                     {link.merchant.cuit ? ` · ${link.merchant.cuit}` : ''}
                                   </span>
                                   <button
@@ -464,6 +537,101 @@ export default function SuperAdminBrandsPage() {
               onChange={(event) => setBrandNombre(event.target.value)}
               required
             />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Logo URL</label>
+              <input
+                className="mt-2 w-full bg-surface-container-lowest border-none rounded-xl px-4 py-3 text-sm"
+                value={brandLogoUrl}
+                onChange={(event) => setBrandLogoUrl(event.target.value)}
+                placeholder="https://"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Sitio web
+              </label>
+              <input
+                className="mt-2 w-full bg-surface-container-lowest border-none rounded-xl px-4 py-3 text-sm"
+                value={brandSitioWeb}
+                onChange={(event) => setBrandSitioWeb(event.target.value)}
+                placeholder="https://"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Facebook</label>
+              <input
+                className="mt-2 w-full bg-surface-container-lowest border-none rounded-xl px-4 py-3 text-sm"
+                value={brandFacebook}
+                onChange={(event) => setBrandFacebook(event.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Instagram</label>
+              <input
+                className="mt-2 w-full bg-surface-container-lowest border-none rounded-xl px-4 py-3 text-sm"
+                value={brandInstagram}
+                onChange={(event) => setBrandInstagram(event.target.value)}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Twitter</label>
+            <input
+              className="mt-2 w-full bg-surface-container-lowest border-none rounded-xl px-4 py-3 text-sm"
+              value={brandTwitter}
+              onChange={(event) => setBrandTwitter(event.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Email principal
+              </label>
+              <input
+                className="mt-2 w-full bg-surface-container-lowest border-none rounded-xl px-4 py-3 text-sm"
+                type="email"
+                value={brandEmail}
+                onChange={(event) => setBrandEmail(event.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Telefono principal
+              </label>
+              <input
+                className="mt-2 w-full bg-surface-container-lowest border-none rounded-xl px-4 py-3 text-sm"
+                value={brandTelefono}
+                onChange={(event) => setBrandTelefono(event.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Procesador de pago
+              </label>
+              <input
+                className="mt-2 w-full bg-surface-container-lowest border-none rounded-xl px-4 py-3 text-sm"
+                value={brandProcessor}
+                onChange={(event) => setBrandProcessor(event.target.value)}
+                placeholder="Prisma, Fiserv"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Rubros
+              </label>
+              <input
+                className="mt-2 w-full bg-surface-container-lowest border-none rounded-xl px-4 py-3 text-sm"
+                value={brandRubros}
+                onChange={(event) => setBrandRubros(event.target.value)}
+                placeholder="Moda, Gastronomia, Hogar"
+              />
+            </div>
           </div>
           <div>
             <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Estado</label>
