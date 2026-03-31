@@ -9,6 +9,7 @@ No representa aislamiento real para produccion.
 - Banco: https://bank1.automatixpay.com
 - Central staging: https://staging.automatixpay.com
 - Banco staging: https://bankstaging.automatixpay.com
+- Banco dev (instancia separada): https://devbank.automatixpay.com
 
 Nota: los dominios staging requieren que existan los registros DNS A/AAAA.
 
@@ -16,6 +17,12 @@ Nota: los dominios staging requieren que existan los registros DNS A/AAAA.
 - Bank API: 3001 (PM2 `dev-bank-api`)
 - Bank Web: 3000 (PM2 `dev-bank-web`)
 - Central API: 4001 (PM2 `dev-bank-central`)
+- DevBank API: 3011 (PM2 `devbank-api`)
+- DevBank Web: 3010 (PM2 `devbank-web`)
+
+## Paths
+- Banco principal: `/home/matias/dev-bank`
+- Banco dev separado: `/home/matias/dev-bank-devbank`
 
 ## Certificados
 - Certificados publicos: Let's Encrypt por dominio.
@@ -34,6 +41,8 @@ Copias locales (este repo, ignorado por git)
 - secrets/mtls/automatixpay/bank1-client.key
 - secrets/mtls/automatixpay/bankstaging-client.crt
 - secrets/mtls/automatixpay/bankstaging-client.key
+- secrets/mtls/automatixpay/devbank-client.crt
+- secrets/mtls/automatixpay/devbank-client.key
 
 ## Nginx
 - Central exige mTLS solo en /sync/.
@@ -69,5 +78,6 @@ Ejemplos:
 ```bash
 ./scripts/sync-test.sh
 MODE=central CENTRAL_BASE_URL=https://staging.automatixpay.com CERT=secrets/mtls/automatixpay/bankstaging-client.crt KEY=secrets/mtls/automatixpay/bankstaging-client.key ./scripts/sync-test.sh
+MODE=central CENTRAL_BASE_URL=https://dev.automatixpay.com CERT=secrets/mtls/automatixpay/devbank-client.crt KEY=secrets/mtls/automatixpay/devbank-client.key BANK_ID=devbank ./scripts/sync-test.sh
 MODE=bank TOKEN=... BANK_API_BASE=https://bank1.automatixpay.com/api ./scripts/sync-test.sh
 ```
