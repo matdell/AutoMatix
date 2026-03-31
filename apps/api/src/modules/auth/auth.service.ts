@@ -12,6 +12,9 @@ import { JwtPayload } from '../common/auth.types';
 import { Prisma, Role } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { randomBytes } from 'crypto';
+import { authenticator } from 'otplib';
+
+authenticator.options = { window: 1 };
 
 @Injectable()
 export class AuthService {
@@ -20,6 +23,95 @@ export class AuthService {
     private jwtService: JwtService,
     private notifications: NotificationsService,
   ) {}
+
+  private buildJwtPayload(user: {
+    id: string;
+    tenantId: string;
+    role: Role;
+    email: string;
+    merchantId?: string | null;
+    bankBranchId?: string | null;
+  }): JwtPayload {
+    return {
+      sub: user.id,
+      tenantId: user.tenantId,
+      role: user.role,
+      email: user.email,
+      merchantId: user.merchantId ?? undefined,
+      bankBranchId: user.bankBranchId ?? undefined,
+    };
+  }
+
+  private async issueLogin(user: {
+    id: string;
+    tenantId: string;
+    role: Role;
+    email: string;
+    nombre: string;
+    merchantId?: string | null;
+    bankBranchId?: string | null;
+  }) {
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    const payload = this.buildJwtPayload(user);
+
+    return {
+      accessToken: this.jwtService.sign(payload),
+      user: {
+        id: user.id,
+        nombre: user.nombre,
+        email: user.email,
+        role: user.role,
+        tenantId: user.tenantId,
+        bankBranchId: user.bankBranchId ?? null,
+      },
+    };
+  }
+
+  private buildTwoFactorMethods(user: { twoFactorEmailEnabled: boolean; twoFactorTotpEnabled: boolean }) {
+    const methods: Array<'email' | 'totp'> = [];
+    if (user.twoFactorTotpEnabled) methods.push('totp');
+    if (user.twoFactorEmailEnabled) methods.push('email');
+    return methods;
+  }
+
+  private generateEmailCode() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  private async createTwoFactorSession(user: {
+    id: string;
+    tenantId: string;
+    email: string;
+    twoFactorEmailEnabled: boolean;
+  }) {
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 10);
+    let emailCode: string | null = null;
+    let emailCodeExpiresAt: Date | null = null;
+
+    if (user.twoFactorEmailEnabled) {
+      emailCode = this.generateEmailCode();
+      emailCodeExpiresAt = expiresAt;
+    }
+
+    const session = await this.prisma.twoFactorSession.create({
+      data: {
+        userId: user.id,
+        expiresAt,
+        emailCode,
+        emailCodeExpiresAt,
+      },
+    });
+
+    if (emailCode) {
+      await this.notifications.sendTwoFactorCode(user.tenantId, user.email, emailCode);
+    }
+
+    return { session, emailSent: Boolean(emailCode) };
+  }
 
   async login(dto: LoginDto) {
     let bank = dto.bankSlug
@@ -55,31 +147,31 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales invalidas');
     }
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    });
+    const methods = this.buildTwoFactorMethods(user);
+    if (methods.length > 0) {
+      const { session, emailSent } = await this.createTwoFactorSession({
+        id: user.id,
+        tenantId: bank.id,
+        email: user.email,
+        twoFactorEmailEnabled: user.twoFactorEmailEnabled,
+      });
+      return {
+        requiresTwoFactor: true,
+        twoFactorToken: session.id,
+        methods,
+        emailSent,
+      };
+    }
 
-    const payload: JwtPayload = {
-      sub: user.id,
+    return this.issueLogin({
+      id: user.id,
       tenantId: bank.id,
       role: user.role,
       email: user.email,
+      nombre: user.nombre,
       merchantId: user.merchantId,
       bankBranchId: user.bankBranchId,
-    };
-
-    return {
-      accessToken: this.jwtService.sign(payload),
-      user: {
-        id: user.id,
-        nombre: user.nombre,
-        email: user.email,
-        role: user.role,
-        tenantId: bank.id,
-        bankBranchId: user.bankBranchId ?? null,
-      },
-    };
+    });
   }
 
   async register(dto: RegisterDto, tenantId: string, actorRole: Role) {
@@ -160,6 +252,8 @@ export class AuthService {
         merchantId: true,
         bankBranchId: true,
         lastLoginAt: true,
+        twoFactorEmailEnabled: true,
+        twoFactorTotpEnabled: true,
       },
     });
   }
@@ -274,6 +368,173 @@ export class AuthService {
       where: { id: record.id },
       data: { usedAt: new Date() },
     });
+
+    return { ok: true };
+  }
+
+  async updateTwoFactorEmail(userId: string, tenantId: string, enabled: boolean) {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, tenantId } });
+    if (!user) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorEmailEnabled: enabled },
+      select: {
+        id: true,
+        twoFactorEmailEnabled: true,
+        twoFactorTotpEnabled: true,
+      },
+    });
+    return updated;
+  }
+
+  async setupTotp(userId: string, tenantId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      select: { email: true },
+    });
+    if (!user) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+    const secret = authenticator.generateSecret();
+    const issuer = 'AutoMatix';
+    const otpauthUrl = authenticator.keyuri(user.email, issuer, secret);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        twoFactorTotpSecret: secret,
+        twoFactorTotpEnabled: false,
+      },
+    });
+
+    return { secret, otpauthUrl };
+  }
+
+  async verifyTotp(userId: string, tenantId: string, code: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      select: { twoFactorTotpSecret: true },
+    });
+    if (!user || !user.twoFactorTotpSecret) {
+      throw new BadRequestException('No hay configuracion de Google Authenticator');
+    }
+    const token = code.replace(/\s/g, '');
+    const isValid = authenticator.verify({ token, secret: user.twoFactorTotpSecret });
+    if (!isValid) {
+      throw new BadRequestException('Codigo invalido');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorTotpEnabled: true },
+    });
+
+    return { ok: true };
+  }
+
+  async disableTotp(userId: string, tenantId: string) {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, tenantId } });
+    if (!user) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorTotpEnabled: false, twoFactorTotpSecret: null },
+    });
+
+    return { ok: true };
+  }
+
+  async verifyTwoFactor(token: string, code: string, method: 'email' | 'totp') {
+    const session = await this.prisma.twoFactorSession.findUnique({
+      where: { id: token },
+      include: { user: true },
+    });
+    if (!session || session.usedAt || session.expiresAt < new Date()) {
+      throw new BadRequestException('La sesion de verificacion expiro');
+    }
+
+    const user = session.user;
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+
+    const cleanCode = code.replace(/\s/g, '');
+
+    if (method === 'email') {
+      if (!user.twoFactorEmailEnabled) {
+        throw new BadRequestException('La verificacion por email no esta habilitada');
+      }
+      if (!session.emailCode || !session.emailCodeExpiresAt || session.emailCodeExpiresAt < new Date()) {
+        throw new BadRequestException('El codigo expiro');
+      }
+      if (session.emailCodeUsedAt) {
+        throw new BadRequestException('El codigo ya fue utilizado');
+      }
+      if (session.emailCode !== cleanCode) {
+        throw new BadRequestException('Codigo invalido');
+      }
+    }
+
+    if (method === 'totp') {
+      if (!user.twoFactorTotpEnabled || !user.twoFactorTotpSecret) {
+        throw new BadRequestException('Google Authenticator no esta habilitado');
+      }
+      const isValid = authenticator.verify({ token: cleanCode, secret: user.twoFactorTotpSecret });
+      if (!isValid) {
+        throw new BadRequestException('Codigo invalido');
+      }
+    }
+
+    await this.prisma.twoFactorSession.update({
+      where: { id: session.id },
+      data: {
+        usedAt: new Date(),
+        emailCodeUsedAt: method === 'email' ? new Date() : session.emailCodeUsedAt,
+      },
+    });
+
+    return this.issueLogin({
+      id: user.id,
+      tenantId: user.tenantId,
+      role: user.role,
+      email: user.email,
+      nombre: user.nombre,
+      merchantId: user.merchantId,
+      bankBranchId: user.bankBranchId,
+    });
+  }
+
+  async resendTwoFactorCode(token: string) {
+    const session = await this.prisma.twoFactorSession.findUnique({
+      where: { id: token },
+      include: { user: true },
+    });
+    if (!session || session.usedAt || session.expiresAt < new Date()) {
+      throw new BadRequestException('La sesion de verificacion expiro');
+    }
+
+    const user = session.user;
+    if (!user || !user.twoFactorEmailEnabled) {
+      throw new BadRequestException('La verificacion por email no esta habilitada');
+    }
+
+    const emailCode = this.generateEmailCode();
+    const emailCodeExpiresAt = new Date(Date.now() + 1000 * 60 * 10);
+
+    await this.prisma.twoFactorSession.update({
+      where: { id: session.id },
+      data: {
+        emailCode,
+        emailCodeExpiresAt,
+        emailCodeUsedAt: null,
+      },
+    });
+
+    await this.notifications.sendTwoFactorCode(user.tenantId, user.email, emailCode);
 
     return { ok: true };
   }

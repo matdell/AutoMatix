@@ -12,6 +12,16 @@ export default function LoginPage() {
   const [bankSlug, setBankSlug] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<'login' | 'twoFactor'>('login');
+  const [twoFactorToken, setTwoFactorToken] = useState('');
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [twoFactorMethods, setTwoFactorMethods] = useState<Array<'email' | 'totp'>>([]);
+  const [twoFactorMethod, setTwoFactorMethod] = useState<'email' | 'totp'>('totp');
+  const [twoFactorMessage, setTwoFactorMessage] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+  const availableMethods = twoFactorMethods.length
+    ? twoFactorMethods
+    : (['totp', 'email'] as Array<'email' | 'totp'>);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -32,6 +42,16 @@ export default function LoginPage() {
         const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message;
         throw new Error(message || 'No se pudo iniciar sesion');
       }
+      if (data?.requiresTwoFactor) {
+        setStep('twoFactor');
+        setTwoFactorToken(data.twoFactorToken);
+        const methods = Array.isArray(data.methods) ? (data.methods as Array<'email' | 'totp'>) : [];
+        setTwoFactorMethods(methods);
+        setTwoFactorMethod(methods.includes('totp') ? 'totp' : 'email');
+        setTwoFactorMessage(data.emailSent ? 'Te enviamos un codigo a tu email.' : null);
+        setTwoFactorCode('');
+        return;
+      }
       if (data?.accessToken) {
         setToken(data.accessToken);
         window.localStorage.setItem('user', JSON.stringify(data.user));
@@ -42,6 +62,63 @@ export default function LoginPage() {
       setError(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const onVerifyTwoFactor = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/2fa/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: twoFactorToken,
+          code: twoFactorCode,
+          method: twoFactorMethod,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message;
+        throw new Error(message || 'No se pudo verificar el codigo');
+      }
+      if (data?.accessToken) {
+        setToken(data.accessToken);
+        window.localStorage.setItem('user', JSON.stringify(data.user));
+      }
+      router.push('/dashboard');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error inesperado';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendTwoFactor = async () => {
+    if (!twoFactorToken) return;
+    setError(null);
+    setTwoFactorMessage(null);
+    setResending(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/2fa/resend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: twoFactorToken }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message;
+        throw new Error(message || 'No se pudo reenviar el codigo');
+      }
+      setTwoFactorMessage('Codigo reenviado a tu email.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error inesperado';
+      setError(message);
+    } finally {
+      setResending(false);
     }
   };
 
@@ -70,111 +147,192 @@ export default function LoginPage() {
               <AutoMatixLogo className="h-10 w-48" showSubtitle={false} />
             </div>
             <div className="mb-10">
-              <h2 className="text-2xl font-semibold text-on-surface mb-2">Bienvenido de vuelta</h2>
+              <h2 className="text-2xl font-semibold text-on-surface mb-2">
+                {step === 'login' ? 'Bienvenido de vuelta' : 'Verificacion en dos pasos'}
+              </h2>
               <p className="text-on-surface-variant text-sm">
-                Ingrese sus credenciales para acceder al portal.
+                {step === 'login'
+                  ? 'Ingrese sus credenciales para acceder al portal.'
+                  : 'Ingresa el codigo para completar el inicio de sesion.'}
               </p>
             </div>
-            <form className="space-y-6" onSubmit={onSubmit}>
-              <div className="space-y-2">
-                <label
-                  className="block text-xs font-semibold uppercase tracking-widest text-on-surface-variant"
-                  htmlFor="bankSlug"
-                >
-                  Banco (slug)
-                </label>
-                <div className="relative">
-                  <input
-                    className="w-full bg-surface-container-low border-none rounded-xl px-4 py-3.5 text-on-surface text-sm focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-outline-variant"
-                    id="bankSlug"
-                    name="bankSlug"
-                    placeholder="banco-andino"
-                    type="text"
-                    value={bankSlug}
-                    onChange={(event) => setBankSlug(event.target.value)}
-                  />
-                  <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-outline-variant text-lg">
-                    domain
-                  </span>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label
-                  className="block text-xs font-semibold uppercase tracking-widest text-on-surface-variant"
-                  htmlFor="email"
-                >
-                  Email institucional
-                </label>
-                <div className="relative">
-                  <input
-                    className="w-full bg-surface-container-low border-none rounded-xl px-4 py-3.5 text-on-surface text-sm focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-outline-variant"
-                    id="email"
-                    name="email"
-                    placeholder="nombre@organizacion.com"
-                    required
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                  />
-                  <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-outline-variant text-lg">
-                    alternate_email
-                  </span>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
+            {step === 'login' ? (
+              <form className="space-y-6" onSubmit={onSubmit}>
+                <div className="space-y-2">
                   <label
                     className="block text-xs font-semibold uppercase tracking-widest text-on-surface-variant"
-                    htmlFor="password"
+                    htmlFor="bankSlug"
                   >
-                    Contrasena
+                    Banco (slug)
                   </label>
-                  <a
-                    className="text-xs font-medium text-primary hover:text-primary-dim transition-colors"
-                    href="/reset-password"
-                  >
-                    Olvidaste el acceso?
-                  </a>
+                  <div className="relative">
+                    <input
+                      className="w-full bg-surface-container-low border-none rounded-xl px-4 py-3.5 text-on-surface text-sm focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-outline-variant"
+                      id="bankSlug"
+                      name="bankSlug"
+                      placeholder="banco-andino"
+                      type="text"
+                      value={bankSlug}
+                      onChange={(event) => setBankSlug(event.target.value)}
+                    />
+                    <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-outline-variant text-lg">
+                      domain
+                    </span>
+                  </div>
                 </div>
-                <div className="relative">
+                <div className="space-y-2">
+                  <label
+                    className="block text-xs font-semibold uppercase tracking-widest text-on-surface-variant"
+                    htmlFor="email"
+                  >
+                    Email institucional
+                  </label>
+                  <div className="relative">
+                    <input
+                      className="w-full bg-surface-container-low border-none rounded-xl px-4 py-3.5 text-on-surface text-sm focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-outline-variant"
+                      id="email"
+                      name="email"
+                      placeholder="nombre@organizacion.com"
+                      required
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                    />
+                    <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-outline-variant text-lg">
+                      alternate_email
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label
+                      className="block text-xs font-semibold uppercase tracking-widest text-on-surface-variant"
+                      htmlFor="password"
+                    >
+                      Contrasena
+                    </label>
+                    <a
+                      className="text-xs font-medium text-primary hover:text-primary-dim transition-colors"
+                      href="/reset-password"
+                    >
+                      Olvidaste el acceso?
+                    </a>
+                  </div>
+                  <div className="relative">
+                    <input
+                      className="w-full bg-surface-container-low border-none rounded-xl px-4 py-3.5 text-on-surface text-sm focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-outline-variant"
+                      id="password"
+                      name="password"
+                      placeholder="••••••••"
+                      required
+                      type="password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                    />
+                    <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-outline-variant text-lg">
+                      lock
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 py-2">
+                  <input
+                    className="w-4 h-4 rounded text-primary focus:ring-primary/20 border-outline-variant/30 bg-surface-container-low"
+                    id="remember"
+                    type="checkbox"
+                  />
+                  <label className="text-sm text-on-surface-variant" htmlFor="remember">
+                    Mantener sesion por 24 horas
+                  </label>
+                </div>
+                {error ? (
+                  <div className="text-sm text-error bg-error-container/30 px-4 py-3 rounded-xl">
+                    {error}
+                  </div>
+                ) : null}
+                <button
+                  className="w-full primary-gradient text-white font-medium py-3.5 rounded-xl shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all active:scale-[0.98]"
+                  type="submit"
+                  disabled={loading}
+                >
+                  {loading ? 'Ingresando...' : 'Ingresar al panel'}
+                </button>
+              </form>
+            ) : (
+              <form className="space-y-6" onSubmit={onVerifyTwoFactor}>
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                    Metodo de verificacion
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {availableMethods.map((method) => (
+                      <button
+                        key={method}
+                        type="button"
+                        className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-widest ${
+                          twoFactorMethod === method
+                            ? 'border-primary text-primary'
+                            : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                        }`}
+                        onClick={() => setTwoFactorMethod(method)}
+                      >
+                        {method === 'totp' ? 'Google Authenticator' : 'Email'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                    Codigo de verificacion
+                  </label>
                   <input
                     className="w-full bg-surface-container-low border-none rounded-xl px-4 py-3.5 text-on-surface text-sm focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-outline-variant"
-                    id="password"
-                    name="password"
-                    placeholder="••••••••"
-                    required
-                    type="password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="123456"
+                    value={twoFactorCode}
+                    onChange={(event) => setTwoFactorCode(event.target.value)}
                   />
-                  <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-outline-variant text-lg">
-                    lock
-                  </span>
+                  {twoFactorMethod === 'email' ? (
+                    <button
+                      type="button"
+                      className="text-xs font-semibold uppercase tracking-widest text-primary hover:underline"
+                      onClick={resendTwoFactor}
+                      disabled={resending}
+                    >
+                      {resending ? 'Enviando...' : 'Reenviar codigo'}
+                    </button>
+                  ) : null}
                 </div>
-              </div>
-              <div className="flex items-center gap-3 py-2">
-                <input
-                  className="w-4 h-4 rounded text-primary focus:ring-primary/20 border-outline-variant/30 bg-surface-container-low"
-                  id="remember"
-                  type="checkbox"
-                />
-                <label className="text-sm text-on-surface-variant" htmlFor="remember">
-                  Mantener sesion por 24 horas
-                </label>
-              </div>
-              {error ? (
-                <div className="text-sm text-error bg-error-container/30 px-4 py-3 rounded-xl">
-                  {error}
-                </div>
-              ) : null}
-              <button
-                className="w-full primary-gradient text-white font-medium py-3.5 rounded-xl shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all active:scale-[0.98]"
-                type="submit"
-                disabled={loading}
-              >
-                {loading ? 'Ingresando...' : 'Ingresar al panel'}
-              </button>
-            </form>
+                {twoFactorMessage ? (
+                  <div className="text-sm text-primary bg-primary-container/30 px-4 py-3 rounded-xl">
+                    {twoFactorMessage}
+                  </div>
+                ) : null}
+                {error ? (
+                  <div className="text-sm text-error bg-error-container/30 px-4 py-3 rounded-xl">
+                    {error}
+                  </div>
+                ) : null}
+                <button
+                  className="w-full primary-gradient text-white font-medium py-3.5 rounded-xl shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all active:scale-[0.98]"
+                  type="submit"
+                  disabled={loading}
+                >
+                  {loading ? 'Verificando...' : 'Verificar y continuar'}
+                </button>
+                <button
+                  type="button"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-300"
+                  onClick={() => {
+                    setStep('login');
+                    setTwoFactorToken('');
+                    setTwoFactorCode('');
+                    setTwoFactorMessage(null);
+                    setError(null);
+                  }}
+                >
+                  Volver al login
+                </button>
+              </form>
+            )}
             <div className="mt-12 pt-8 border-t border-outline-variant/10 text-center">
               <p className="text-sm text-on-surface-variant mb-4">
                 Protegido con cifrado de nivel empresarial

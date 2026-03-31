@@ -6,6 +6,10 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { TwoFactorVerifyDto } from './dto/two-factor-verify.dto';
+import { TwoFactorResendDto } from './dto/two-factor-resend.dto';
+import { TwoFactorEmailDto } from './dto/two-factor-email.dto';
+import { TwoFactorTotpVerifyDto } from './dto/two-factor-totp-verify.dto';
 import { JwtAuthGuard } from '../common/jwt-auth.guard';
 import { RolesGuard } from '../common/roles.guard';
 import { Roles } from '../common/roles.decorator';
@@ -21,6 +25,16 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
+  @Post('2fa/verify')
+  async verifyTwoFactor(@Body() dto: TwoFactorVerifyDto) {
+    return this.authService.verifyTwoFactor(dto.token, dto.code, dto.method);
+  }
+
+  @Post('2fa/resend')
+  async resendTwoFactor(@Body() dto: TwoFactorResendDto) {
+    return this.authService.resendTwoFactorCode(dto.token);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('me')
   async me(@CurrentUser() user: { userId: string; tenantId: string }) {
@@ -34,6 +48,36 @@ export class AuthController {
     @CurrentUser() user: { userId: string; tenantId: string },
   ) {
     return this.authService.updateProfile(user.userId, user.tenantId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('2fa/email')
+  async updateTwoFactorEmail(
+    @Body() dto: TwoFactorEmailDto,
+    @CurrentUser() user: { userId: string; tenantId: string },
+  ) {
+    return this.authService.updateTwoFactorEmail(user.userId, user.tenantId, dto.enabled);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('2fa/totp/setup')
+  async setupTotp(@CurrentUser() user: { userId: string; tenantId: string }) {
+    return this.authService.setupTotp(user.userId, user.tenantId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('2fa/totp/verify')
+  async verifyTotp(
+    @Body() dto: TwoFactorTotpVerifyDto,
+    @CurrentUser() user: { userId: string; tenantId: string },
+  ) {
+    return this.authService.verifyTotp(user.userId, user.tenantId, dto.code);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('2fa/totp/disable')
+  async disableTotp(@CurrentUser() user: { userId: string; tenantId: string }) {
+    return this.authService.disableTotp(user.userId, user.tenantId);
   }
 
   @UseGuards(JwtAuthGuard)

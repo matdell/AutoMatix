@@ -121,4 +121,19 @@ export class NotificationsService {
       html: `<p>${mensaje}</p>`,
     });
   }
+
+  async sendTwoFactorCode(tenantId: string, email: string, code: string) {
+    await this.deliver({
+      tenantId,
+      tipo: NotificationType.TWO_FACTOR_CODE,
+      destino: email,
+      subject: 'Tu codigo de verificacion',
+      html: `
+        <p>Usa este codigo para completar el inicio de sesion:</p>
+        <p style="font-size: 20px; font-weight: 700; letter-spacing: 2px;">${code}</p>
+        <p>El codigo vence en 10 minutos.</p>
+      `,
+      payload: { code },
+    });
+  }
 }
