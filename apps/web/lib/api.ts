@@ -23,7 +23,20 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
   if (token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  return fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  if (typeof window !== 'undefined') {
+    const nextToken = response.headers.get('x-access-token');
+    if (nextToken) {
+      setToken(nextToken);
+    }
+    if (response.status === 401) {
+      clearToken();
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+  }
+  return response;
 }
 
 async function parseError(response: Response) {
@@ -44,6 +57,9 @@ export async function apiJson<T>(path: string, options: RequestInit = {}) {
     headers.set('Content-Type', 'application/json');
   }
   const response = await apiFetch(path, { ...options, headers });
+  if (response.status === 401) {
+    throw new Error('');
+  }
   if (!response.ok) {
     const message = await parseError(response);
     throw new Error(message);
@@ -53,6 +69,9 @@ export async function apiJson<T>(path: string, options: RequestInit = {}) {
 
 export async function apiText(path: string, options: RequestInit = {}) {
   const response = await apiFetch(path, options);
+  if (response.status === 401) {
+    throw new Error('');
+  }
   if (!response.ok) {
     const message = await parseError(response);
     throw new Error(message);
