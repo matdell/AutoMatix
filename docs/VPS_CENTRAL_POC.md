@@ -7,6 +7,10 @@ No representa aislamiento real para produccion.
 ## Dominios
 - Central: https://dev.automatixpay.com
 - Banco: https://bank1.automatixpay.com
+- Central staging: https://staging.automatixpay.com
+- Banco staging: https://bankstaging.automatixpay.com
+
+Nota: los dominios staging requieren que existan los registros DNS A/AAAA.
 
 ## Servicios
 - Bank API: 3001 (PM2 `dev-bank-api`)
