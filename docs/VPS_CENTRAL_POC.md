@@ -38,6 +38,13 @@ Endpoints expuestos por el PoC:
 - GET /sync/batch?bankId=...&entity=...&cursor=...
 - POST /sync/ack
 
+## Sync (banco)
+Endpoints en Bank API (requiere JWT de SUPERADMIN o BANK_ADMIN):
+- POST /api/sync/pull
+  - body: { entity, cursor?, bankId? }
+- POST /api/sync/ack
+  - body: { entity, batchId, cursor?, status?, error?, bankId? }
+
 ## Notas
 - El secreto HMAC del sync se define en runtime via env `SYNC_HMAC_SECRET`.
 - Las instancias bancarias no consultan central en linea fuera del sync.
