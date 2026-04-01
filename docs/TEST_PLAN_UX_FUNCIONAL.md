@@ -60,7 +60,9 @@ Cobertura:
    - en una fila de banco, click `Provisionar`
    - elegir destino (`VPS gestionado` / `Cloud cliente` / `On-prem`)
    - completar dominios + credenciales requeridas por destino
-   - enviar solicitud y validar que aparezca en historial con estado `REQUESTED`
+   - enviar solicitud y validar que aparezca en historial con estado `RUNNING`
+   - esperar refresh automatico del historial y validar transicion a `READY` o `FAILED`
+   - si queda `FAILED`, usar `Reintentar` y validar nueva ejecucion
 
 ## Fase 2: UX SuperAdmin Usuarios (manual)
 1. Ir a `SuperAdmin -> Usuarios`.

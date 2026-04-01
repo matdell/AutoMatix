@@ -36,5 +36,12 @@ export class BankProvisioningController {
   ) {
     return this.provisioning.updateStatus(bankId, requestId, dto);
   }
-}
 
+  @Post(':requestId/run')
+  async runNow(
+    @Param('bankId') bankId: string,
+    @Param('requestId') requestId: string,
+  ) {
+    return this.provisioning.runNow(bankId, requestId);
+  }
+}

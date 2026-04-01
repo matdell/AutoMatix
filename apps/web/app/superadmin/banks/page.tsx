@@ -54,6 +54,7 @@ type BankProvisioningRequest = {
   notes?: string | null;
   errorMessage?: string | null;
   hasCredentials: boolean;
+  processedAt?: string | null;
   createdAt: string;
 };
 
@@ -254,6 +255,21 @@ export default function SuperAdminBanksPage() {
     }
   };
 
+  const rerunProvisioningRequest = async (requestId: string) => {
+    if (!provisioningBank) return;
+    setError(null);
+    setSuccess(null);
+    try {
+      await apiJson(`/banks/${provisioningBank.id}/provisioning-requests/${requestId}/run`, {
+        method: 'POST',
+      });
+      setSuccess('Provisionamiento relanzado.');
+      await loadProvisioningRequests(provisioningBank.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo relanzar el provisionamiento');
+    }
+  };
+
   const openProvisionModal = async (bank: Bank) => {
     setProvisioningBank(bank);
     setProvisioningTarget('VPS_MANAGED');
@@ -287,6 +303,14 @@ export default function SuperAdminBanksPage() {
       loadBanks();
     }
   }, [isSuperAdmin]);
+
+  useEffect(() => {
+    if (!showProvisionModal || !provisioningBank) return;
+    const timer = window.setInterval(() => {
+      void loadProvisioningRequests(provisioningBank.id);
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [showProvisionModal, provisioningBank]);
 
   useEffect(() => {
     if (selectedBankId === '') return;
@@ -597,7 +621,7 @@ export default function SuperAdminBanksPage() {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      setSuccess('Solicitud de provisionamiento creada. Quedo en cola con estado REQUESTED.');
+      setSuccess('Solicitud creada. El provisionamiento se ejecuta automaticamente (estado RUNNING/READY).');
       await loadProvisioningRequests(provisioningBank.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo crear la solicitud de provisionamiento');
@@ -1770,17 +1794,36 @@ export default function SuperAdminBanksPage() {
                     <div className="text-xs text-slate-600">
                       {new Date(item.createdAt).toLocaleString('es-AR')}
                     </div>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${provisionStatusClass(item.status)}`}
-                    >
-                      {item.status}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${provisionStatusClass(item.status)}`}
+                      >
+                        {item.status}
+                      </span>
+                      {(item.status === 'FAILED' || item.status === 'CANCELLED') ? (
+                        <button
+                          type="button"
+                          className="rounded-full border border-slate-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-slate-600 hover:border-slate-300"
+                          onClick={() => rerunProvisioningRequest(item.id)}
+                        >
+                          Reintentar
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                   <div className="mt-1 text-sm text-slate-800">
                     {item.target}
                     {item.provider ? ` • ${item.provider}` : ''}
                     {item.domain ? ` • ${item.domain}` : ''}
                   </div>
+                  {item.processedAt ? (
+                    <div className="mt-1 text-xs text-slate-500">
+                      Procesado: {new Date(item.processedAt).toLocaleString('es-AR')}
+                    </div>
+                  ) : null}
+                  {item.notes ? (
+                    <div className="mt-1 text-xs text-slate-500 whitespace-pre-line">{item.notes}</div>
+                  ) : null}
                   {item.errorMessage ? (
                     <div className="mt-1 text-xs text-rose-700">{item.errorMessage}</div>
                   ) : null}

@@ -60,6 +60,11 @@ Checklist operativo actual (manual):
 Variables recomendadas para provisioning:
 - `PROVISIONING_CREDENTIALS_KEY` (recomendado): clave para cifrar credenciales de provisioning en DB.
   - Si no se define, el sistema usa `JWT_SECRET` como fallback.
+- `PROVISIONING_TEMPLATE_DIR` (opcional): template de instancia a clonar. Default: repo actual de la instancia.
+- `PROVISIONING_INSTANCE_BASE_DIR` (opcional): carpeta base donde se crean nuevas instancias. Default: parent del template.
+- `PROVISIONING_DB_CONTAINER`, `PROVISIONING_DB_USER`, `PROVISIONING_DB_PASSWORD`, `PROVISIONING_DB_HOST`, `PROVISIONING_DB_PORT`, `PROVISIONING_DB_PREFIX`.
+- `PROVISIONING_PORT_WEB_START`, `PROVISIONING_PORT_WEB_END` para asignacion automatica de puertos.
+- `PROVISIONING_TLS_EMAIL` para Certbot.
 
 ## Certificados
 - Certificados publicos: Let's Encrypt por dominio.
@@ -112,12 +117,15 @@ Endpoints para registrar y seguir solicitudes de provisionamiento por banco:
     - `notes?`
 - `PATCH /api/banks/:bankId/provisioning-requests/:requestId/status`
   - body: `{ status, notes?, errorMessage? }`
+- `POST /api/banks/:bankId/provisioning-requests/:requestId/run`
+  - relanza provisioning automatico (solo `VPS_MANAGED`).
 
 ## Notas
 - El secreto HMAC del sync se define en runtime via env `SYNC_HMAC_SECRET`.
 - Las instancias bancarias no consultan central en linea fuera del sync.
 - El frontend debe consumir API relativa (`NEXT_PUBLIC_API_URL=/api`) para no cruzar dominios entre entornos.
 - El login ya no requiere `bankSlug`: la API resuelve banco por `LOGIN_DEFAULT_BANK_SLUG` y/o subdominio.
+- Para `VPS_MANAGED`, al crear la solicitud se ejecuta automaticamente: DB + instancia + PM2 + Nginx + Certbot.
 - Para el banco, configurar en `apps/api/.env`:
   - CENTRAL_SYNC_BASE_URL=https://dev.automatixpay.com
   - SYNC_BANK_ID=bank1
