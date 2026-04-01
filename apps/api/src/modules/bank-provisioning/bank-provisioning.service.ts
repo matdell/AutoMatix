@@ -407,8 +407,7 @@ APP_API="bank-$BANK_SLUG-api"
 APP_WEB="bank-$BANK_SLUG-web"
 
 if [ -d "$TARGET_DIR" ]; then
-  echo "ERROR: target dir already exists: $TARGET_DIR"
-  exit 10
+  echo "INFO: target dir already exists, reusing: $TARGET_DIR"
 fi
 
 USED_PORTS="$(ss -ltnH | awk '{print $4}' | awk -F: '{print $NF}' | sort -n | uniq || true)"
@@ -432,10 +431,10 @@ DB_NAME="$DB_PREFIX$DB_BASENAME"
 
 DB_EXISTS="$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | tr -d '[:space:]')"
 if [ "$DB_EXISTS" = "1" ]; then
-  echo "ERROR: database already exists: $DB_NAME"
-  exit 12
+  echo "INFO: database already exists, reusing: $DB_NAME"
+else
+  docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE \\"$DB_NAME\\";"
 fi
-docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE \\"$DB_NAME\\";"
 
 mkdir -p "$TARGET_DIR"
 rsync -a --delete --exclude '.git' --exclude 'node_modules' --exclude 'apps/api/dist' --exclude 'apps/web/.next' --exclude 'logs' "$TEMPLATE_DIR/" "$TARGET_DIR/"
