@@ -9,7 +9,6 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [bankSlug, setBankSlug] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<'login' | 'twoFactor'>('login');
@@ -34,7 +33,6 @@ export default function LoginPage() {
         body: JSON.stringify({
           email,
           password,
-          bankSlug: bankSlug || undefined,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -158,28 +156,6 @@ export default function LoginPage() {
             </div>
             {step === 'login' ? (
               <form className="space-y-6" onSubmit={onSubmit}>
-                <div className="space-y-2">
-                  <label
-                    className="block text-xs font-semibold uppercase tracking-widest text-on-surface-variant"
-                    htmlFor="bankSlug"
-                  >
-                    Banco (slug)
-                  </label>
-                  <div className="relative">
-                    <input
-                      className="w-full bg-surface-container-low border-none rounded-xl px-4 py-3.5 text-on-surface text-sm focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-outline-variant"
-                      id="bankSlug"
-                      name="bankSlug"
-                      placeholder="banco-andino"
-                      type="text"
-                      value={bankSlug}
-                      onChange={(event) => setBankSlug(event.target.value)}
-                    />
-                    <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-outline-variant text-lg">
-                      domain
-                    </span>
-                  </div>
-                </div>
                 <div className="space-y-2">
                   <label
                     className="block text-xs font-semibold uppercase tracking-widest text-on-surface-variant"

@@ -40,7 +40,7 @@ Checklist operativo actual (manual):
 3. Base de datos:
    - Crear DB PostgreSQL dedicada (ej. `bankx`).
 4. Variables:
-   - `apps/api/.env`: `DATABASE_URL`, `APP_URL`, `PORT`, `SYNC_*`.
+   - `apps/api/.env`: `DATABASE_URL`, `APP_URL`, `PORT`, `SYNC_*`, `LOGIN_DEFAULT_BANK_SLUG`.
    - `apps/web/.env.production`: `NEXT_PUBLIC_API_URL=/api` (obligatorio).
 5. Migraciones y build:
    - `npx prisma migrate deploy` en `apps/api`.
@@ -117,6 +117,7 @@ Endpoints para registrar y seguir solicitudes de provisionamiento por banco:
 - El secreto HMAC del sync se define en runtime via env `SYNC_HMAC_SECRET`.
 - Las instancias bancarias no consultan central en linea fuera del sync.
 - El frontend debe consumir API relativa (`NEXT_PUBLIC_API_URL=/api`) para no cruzar dominios entre entornos.
+- El login ya no requiere `bankSlug`: la API resuelve banco por `LOGIN_DEFAULT_BANK_SLUG` y/o subdominio.
 - Para el banco, configurar en `apps/api/.env`:
   - CENTRAL_SYNC_BASE_URL=https://dev.automatixpay.com
   - SYNC_BANK_ID=bank1

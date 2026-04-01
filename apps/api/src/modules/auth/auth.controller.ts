@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -15,14 +15,22 @@ import { RolesGuard } from '../common/roles.guard';
 import { Roles } from '../common/roles.decorator';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../common/current-user.decorator';
+import { Request } from 'express';
 
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Post('login')
-  async login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(@Body() dto: LoginDto, @Req() request: Request) {
+    const forwardedHost = request.headers['x-forwarded-host'];
+    const host =
+      typeof forwardedHost === 'string'
+        ? forwardedHost
+        : Array.isArray(forwardedHost)
+          ? forwardedHost[0]
+          : request.headers.host;
+    return this.authService.login(dto, host);
   }
 
   @Post('2fa/verify')

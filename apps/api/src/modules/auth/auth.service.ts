@@ -13,6 +13,7 @@ import { Prisma, Role } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { randomBytes } from 'crypto';
 import { authenticator } from 'otplib';
+import { ConfigService } from '@nestjs/config';
 
 authenticator.options = { window: 1 };
 
@@ -22,7 +23,58 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private notifications: NotificationsService,
+    private config: ConfigService,
   ) {}
+
+  private normalizeHost(rawHost?: string | null) {
+    if (!rawHost) {
+      return null;
+    }
+    const first = rawHost.split(',')[0]?.trim().toLowerCase();
+    if (!first) {
+      return null;
+    }
+    return first.replace(/:\d+$/, '');
+  }
+
+  private async findBankBySlug(slug?: string | null) {
+    const normalized = slug?.trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+    return this.prisma.bank.findUnique({ where: { slug: normalized } });
+  }
+
+  private async resolveBankForLogin(dto: LoginDto, requestHost?: string) {
+    const byRequest = await this.findBankBySlug(dto.bankSlug);
+    if (byRequest) {
+      return byRequest;
+    }
+
+    const envDefaultSlug = this.config.get<string>('LOGIN_DEFAULT_BANK_SLUG');
+    const byEnvDefault = await this.findBankBySlug(envDefaultSlug);
+    if (byEnvDefault) {
+      return byEnvDefault;
+    }
+
+    const normalizedHost = this.normalizeHost(requestHost);
+    const subdomain = normalizedHost?.split('.')[0];
+    const bySubdomain = await this.findBankBySlug(subdomain);
+    if (bySubdomain) {
+      return bySubdomain;
+    }
+
+    const candidates = await this.prisma.user.findMany({
+      where: { email: dto.email, isActive: true },
+      select: { tenantId: true },
+      take: 2,
+    });
+    if (candidates.length === 1) {
+      return this.prisma.bank.findUnique({ where: { id: candidates[0].tenantId } });
+    }
+
+    return null;
+  }
 
   private buildJwtPayload(user: {
     id: string;
@@ -122,24 +174,10 @@ export class AuthService {
     return { session, emailSent: Boolean(emailCode) };
   }
 
-  async login(dto: LoginDto) {
-    let bank = dto.bankSlug
-      ? await this.prisma.bank.findUnique({ where: { slug: dto.bankSlug } })
-      : null;
-
+  async login(dto: LoginDto, requestHost?: string) {
+    const bank = await this.resolveBankForLogin(dto, requestHost);
     if (!bank) {
-      const candidates = await this.prisma.user.findMany({
-        where: { email: dto.email, isActive: true },
-        select: { tenantId: true },
-        take: 2,
-      });
-      if (candidates.length === 1) {
-        bank = await this.prisma.bank.findUnique({ where: { id: candidates[0].tenantId } });
-      }
-    }
-
-    if (!bank) {
-      throw new UnauthorizedException('Banco no encontrado. Indique el banco.');
+      throw new UnauthorizedException('Banco no encontrado para este dominio.');
     }
     const user = await this.prisma.user.findFirst({
       where: {
