@@ -118,11 +118,18 @@ Resultado funcional (API):
 - Banco crear usuarios: OK
 - Banco crear sucursales: OK
 - Banco editar usuarios: OK
-- Banco editar sucursales: BLOQUEADO (ruta no implementada)
+- Banco editar sucursales: OK (resuelto)
 
-Bloqueante detectado:
-- `PATCH /api/bank-branches/:id` responde `404 Not Found`.
-- Impacta la UX de edición de sucursal bancaria en `SuperAdmin -> Bancos`.
+Fix aplicado:
+- Se implemento `PATCH /api/bank-branches/:id` en API.
+- Archivos:
+  - `apps/api/src/modules/bank-branches/bank-branches.controller.ts`
+  - `apps/api/src/modules/bank-branches/bank-branches.service.ts`
+  - `apps/api/src/modules/bank-branches/dto/update-bank-branch.dto.ts`
+- Deployado y validado en:
+  - `bank1.automatixpay.com`
+  - `devbank.automatixpay.com`
+  - `devbankstaging.automatixpay.com`
 
 Observacion UX actual:
 - `apps/web/app/comercios/page.tsx` es una vista mock (sin CRUD real conectado a API).
