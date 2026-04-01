@@ -95,12 +95,34 @@ Script:
 
 Instalacion sugerida en cada banco:
 ```bash
+cp scripts/sync-pull-cron.sh /home/matias/dev-bank/scripts/sync-pull-cron.sh
+cp scripts/sync-pull-cron.sh /home/matias/dev-bank-devbank/scripts/sync-pull-cron.sh
 cp scripts/sync-pull-cron.sh /home/matias/dev-bank-devbank-staging/scripts/sync-pull-cron.sh
+chmod +x /home/matias/dev-bank/scripts/sync-pull-cron.sh
+chmod +x /home/matias/dev-bank-devbank/scripts/sync-pull-cron.sh
 chmod +x /home/matias/dev-bank-devbank-staging/scripts/sync-pull-cron.sh
+cp scripts/sync-pull-cron.env.example /home/matias/dev-bank/.sync-cron.env
+cp scripts/sync-pull-cron.env.example /home/matias/dev-bank-devbank/.sync-cron.env
 cp scripts/sync-pull-cron.env.example /home/matias/dev-bank-devbank-staging/.sync-cron.env
 ```
 
 Crontab (cada 5 minutos):
 ```bash
+*/5 * * * * ENV_FILE=/home/matias/dev-bank/.sync-cron.env /home/matias/dev-bank/scripts/sync-pull-cron.sh >> /home/matias/dev-bank/logs/sync-pull.log 2>&1
+*/5 * * * * ENV_FILE=/home/matias/dev-bank-devbank/.sync-cron.env /home/matias/dev-bank-devbank/scripts/sync-pull-cron.sh >> /home/matias/dev-bank-devbank/logs/sync-pull.log 2>&1
 */5 * * * * ENV_FILE=/home/matias/dev-bank-devbank-staging/.sync-cron.env /home/matias/dev-bank-devbank-staging/scripts/sync-pull-cron.sh >> /home/matias/dev-bank-devbank-staging/logs/sync-pull.log 2>&1
+```
+
+## Nota PM2 + Prisma en VPS
+- En este VPS `dev-bank-devbank` y `dev-bank-devbank-staging` comparten `node_modules` via symlink a `/home/matias/dev-bank/node_modules`.
+- Prisma puede terminar tomando un `.env` equivocado si no se inyecta `DATABASE_URL` antes de levantar Node.
+- Para evitar mezcla entre instancias, el proceso API se levanta con preload de dotenv:
+  - `node_args: '-r dotenv/config'`
+  - `DOTENV_CONFIG_PATH=.env`
+  - `DOTENV_CONFIG_OVERRIDE=true`
+- Si se reinicia manualmente una API fuera de PM2 ecosystem, usar:
+```bash
+cd /home/matias/<instancia>/apps/api
+set -a; source ./.env; set +a
+pm2 restart <api-name> --update-env
 ```

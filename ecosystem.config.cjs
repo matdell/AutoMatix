@@ -4,9 +4,13 @@ module.exports = {
       name: 'dev-bank-api',
       cwd: './apps/api',
       script: 'dist/main.js',
+      node_args: '-r dotenv/config',
+      env_file: './apps/api/.env',
       env: {
         NODE_ENV: 'production',
         PORT: '3001',
+        DOTENV_CONFIG_PATH: '.env',
+        DOTENV_CONFIG_OVERRIDE: 'true',
       },
     },
     {
@@ -23,6 +27,7 @@ module.exports = {
       name: 'dev-bank-central',
       cwd: './apps/central-api',
       script: 'src/server.js',
+      env_file: './apps/central-api/.env.local',
       env: {
         NODE_ENV: 'production',
         PORT: '4001',
