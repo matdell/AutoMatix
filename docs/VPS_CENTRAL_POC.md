@@ -28,6 +28,35 @@ Nota: los dominios staging requieren que existan los registros DNS A/AAAA.
 - Banco dev separado: `/home/matias/dev-bank-devbank`
 - Banco dev staging separado: `/home/matias/dev-bank-devbank-staging`
 
+## Provisionar nuevo banco (entorno propio)
+Cuando se crea un banco en la UI de SuperAdmin, se crea la entidad de negocio en base de datos.
+Para que ese banco tenga su entorno aislado (app + DB + dominio), hay que provisionar instancia.
+
+Checklist operativo actual (manual):
+1. DNS:
+   - Crear `A/AAAA` para `bankX.automatixpay.com` apuntando al VPS.
+2. Código:
+   - Clonar o copiar plantilla de instancia en `/home/matias/dev-bank-<slug>`.
+3. Base de datos:
+   - Crear DB PostgreSQL dedicada (ej. `bankx`).
+4. Variables:
+   - `apps/api/.env`: `DATABASE_URL`, `APP_URL`, `PORT`, `SYNC_*`.
+   - `apps/web/.env.production`: `NEXT_PUBLIC_API_URL=https://bankX.automatixpay.com/api`.
+5. Migraciones y build:
+   - `npx prisma migrate deploy` en `apps/api`.
+   - `npm run build --workspace apps/api`.
+   - `npm run build --workspace apps/web`.
+6. PM2:
+   - Agregar apps API/Web de la nueva instancia con nombre y puertos propios.
+7. Nginx:
+   - Crear server block para `bankX.automatixpay.com` (web) y `/api` (API).
+8. TLS:
+   - Emitir certificado Let's Encrypt para el nuevo dominio.
+9. Verificación:
+   - Login del admin del banco.
+   - Healthcheck de API.
+   - Sync cron (`scripts/sync-pull-cron.sh`) si aplica.
+
 ## Certificados
 - Certificados publicos: Let's Encrypt por dominio.
 - mTLS: CA interna para validar clientes en /sync/*.

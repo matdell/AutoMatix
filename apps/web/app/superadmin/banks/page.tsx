@@ -27,6 +27,7 @@ type BankBranch = {
   localidad?: string | null;
   region?: string | null;
   tipo?: string | null;
+  direccion?: string | null;
   activo?: boolean;
 };
 
@@ -127,6 +128,7 @@ export default function SuperAdminBanksPage() {
   const [branchLocalidad, setBranchLocalidad] = useState('');
   const [branchRegion, setBranchRegion] = useState('');
   const [branchTipo, setBranchTipo] = useState('');
+  const [branchDireccion, setBranchDireccion] = useState('');
   const [branchActivo, setBranchActivo] = useState(true);
   const [branchSaving, setBranchSaving] = useState(false);
   const [editingBranch, setEditingBranch] = useState<BankBranch | null>(null);
@@ -405,6 +407,7 @@ export default function SuperAdminBanksPage() {
         localidad: branchLocalidad.trim() || undefined,
         region: branchRegion.trim() || undefined,
         tipo: branchTipo.trim() || undefined,
+        direccion: branchDireccion.trim() || undefined,
       };
       await apiJson(`/bank-branches?bankId=${selectedBankId}`, {
         method: 'POST',
@@ -416,6 +419,7 @@ export default function SuperAdminBanksPage() {
       setBranchLocalidad('');
       setBranchRegion('');
       setBranchTipo('');
+      setBranchDireccion('');
       setShowBranchModal(false);
       await loadBranches(selectedBankId);
     } catch (err) {
@@ -438,6 +442,7 @@ export default function SuperAdminBanksPage() {
         localidad: branchLocalidad.trim() || undefined,
         region: branchRegion.trim() || undefined,
         tipo: branchTipo.trim() || undefined,
+        direccion: branchDireccion.trim() || undefined,
         activo: branchActivo,
       };
       await apiJson(`/bank-branches/${editingBranch.id}?bankId=${selectedBankId}`, {
@@ -474,6 +479,7 @@ export default function SuperAdminBanksPage() {
     setBranchLocalidad(branch.localidad || '');
     setBranchRegion(branch.region || '');
     setBranchTipo(branch.tipo || '');
+    setBranchDireccion(branch.direccion || '');
     setBranchActivo(branch.activo !== false);
     setShowEditBranchModal(true);
   };
@@ -828,6 +834,9 @@ export default function SuperAdminBanksPage() {
                                               Localidad
                                             </th>
                                             <th className="px-4 py-2 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                                              Direccion
+                                            </th>
+                                            <th className="px-4 py-2 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
                                               Codigo
                                             </th>
                                             <th className="px-4 py-2 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
@@ -843,6 +852,7 @@ export default function SuperAdminBanksPage() {
                                             <tr key={branch.id} className="hover:bg-white/60">
                                               <td className="px-4 py-3 text-sm text-slate-700">{branch.nombre}</td>
                                               <td className="px-4 py-3 text-sm text-slate-600">{branch.localidad || '-'}</td>
+                                              <td className="px-4 py-3 text-sm text-slate-600">{branch.direccion || '-'}</td>
                                               <td className="px-4 py-3 text-sm text-slate-600">{branch.codigo || '-'}</td>
                                               <td className="px-4 py-3 text-sm text-slate-600">
                                                 {branch.activo === false ? 'Inactiva' : 'Activa'}
@@ -1278,6 +1288,17 @@ export default function SuperAdminBanksPage() {
               onChange={(event) => setBranchTipo(event.target.value)}
             />
           </div>
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+              Direccion
+            </label>
+            <input
+              className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+              value={branchDireccion}
+              onChange={(event) => setBranchDireccion(event.target.value)}
+              placeholder="Calle 123, Ciudad"
+            />
+          </div>
           <button
             className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-300"
             type="submit"
@@ -1336,6 +1357,19 @@ export default function SuperAdminBanksPage() {
                 onChange={(event) => setBranchTipo(event.target.value)}
               />
             </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Direccion
+              </label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={branchDireccion}
+                onChange={(event) => setBranchDireccion(event.target.value)}
+                placeholder="Calle 123, Ciudad"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Estado</label>
               <select

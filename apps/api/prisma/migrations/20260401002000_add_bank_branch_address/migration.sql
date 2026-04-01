@@ -1,0 +1,3 @@
+ALTER TABLE "BankBranch"
+ADD COLUMN IF NOT EXISTS "direccion" TEXT;
+

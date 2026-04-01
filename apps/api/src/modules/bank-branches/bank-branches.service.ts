@@ -23,6 +23,7 @@ export class BankBranchesService {
         localidad: dto.localidad ?? null,
         region: dto.region ?? null,
         tipo: dto.tipo ?? null,
+        direccion: dto.direccion ?? null,
       },
     });
   }
@@ -44,6 +45,7 @@ export class BankBranchesService {
         localidad: dto.localidad ?? undefined,
         region: dto.region ?? undefined,
         tipo: dto.tipo ?? undefined,
+        direccion: dto.direccion ?? undefined,
         activo: dto.activo ?? undefined,
       },
     });

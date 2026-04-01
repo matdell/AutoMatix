@@ -22,7 +22,10 @@ export class UpdateBankBranchDto {
   tipo?: string;
 
   @IsOptional()
+  @IsString()
+  direccion?: string;
+
+  @IsOptional()
   @IsBoolean()
   activo?: boolean;
 }
-

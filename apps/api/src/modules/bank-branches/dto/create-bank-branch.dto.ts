@@ -20,4 +20,8 @@ export class CreateBankBranchDto {
   @IsOptional()
   @IsString()
   tipo?: string;
+
+  @IsOptional()
+  @IsString()
+  direccion?: string;
 }

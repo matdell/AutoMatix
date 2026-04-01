@@ -117,6 +117,7 @@ model BankBranch {
   localidad String?
   region    String?
   tipo      String?
+  direccion String?
   activo    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
