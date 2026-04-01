@@ -106,3 +106,24 @@ Estado:
 - Fase 0: ejecutada -> OK (0 fallas)
 - Fases 1-4: pendientes de ejecucion manual guiada
 
+## Ronda solicitada por producto (2026-03-31)
+Scope pedido:
+- Plataforma central: crear comercio, crear banco, crear usuarios de banco.
+- Banco: crear usuarios, crear sucursales, editar usuarios, editar sucursales.
+
+Resultado funcional (API):
+- Crear comercio: OK
+- Crear banco: OK
+- Crear usuarios de banco: OK
+- Banco crear usuarios: OK
+- Banco crear sucursales: OK
+- Banco editar usuarios: OK
+- Banco editar sucursales: BLOQUEADO (ruta no implementada)
+
+Bloqueante detectado:
+- `PATCH /api/bank-branches/:id` responde `404 Not Found`.
+- Impacta la UX de edición de sucursal bancaria en `SuperAdmin -> Bancos`.
+
+Observacion UX actual:
+- `apps/web/app/comercios/page.tsx` es una vista mock (sin CRUD real conectado a API).
+- Para creación de comercios hoy la validación se hace por API.
