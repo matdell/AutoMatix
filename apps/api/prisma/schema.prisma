@@ -76,6 +76,20 @@ enum NotificationType {
   TWO_FACTOR_CODE
 }
 
+enum ProvisioningTarget {
+  VPS_MANAGED
+  CUSTOMER_CLOUD
+  ON_PREM
+}
+
+enum ProvisioningStatus {
+  REQUESTED
+  RUNNING
+  READY
+  FAILED
+  CANCELLED
+}
+
 model Bank {
   id             String   @id @default(cuid())
   nombre         String
@@ -106,6 +120,7 @@ model Bank {
   validations    ValidationError[]
   notifications  Notification[]
   auditLogs      AuditLog[]
+  provisioningRequests BankProvisioningRequest[]
 }
 
 model BankBranch {
@@ -451,6 +466,30 @@ model TwoFactorSession {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model BankProvisioningRequest {
+  id              String             @id @default(cuid())
+  bankId           String
+  bank             Bank               @relation(fields: [bankId], references: [id])
+  target           ProvisioningTarget
+  status           ProvisioningStatus @default(REQUESTED)
+  provider         String?
+  domain           String?
+  apiDomain        String?
+  region           String?
+  config           Json?
+  credentials      Json?
+  notes            String?
+  createdByUserId  String?
+  processedAt      DateTime?
+  errorMessage     String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([bankId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model AuditLog {

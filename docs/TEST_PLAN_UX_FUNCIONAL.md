@@ -56,6 +56,11 @@ Cobertura:
    - seleccionar varias filas
    - abrir `Editar seleccion`
    - aplicar cambio masivo y validar persistencia
+7. Verificar provisionamiento (nuevo):
+   - en una fila de banco, click `Provisionar`
+   - elegir destino (`VPS gestionado` / `Cloud cliente` / `On-prem`)
+   - completar dominios + credenciales requeridas por destino
+   - enviar solicitud y validar que aparezca en historial con estado `REQUESTED`
 
 ## Fase 2: UX SuperAdmin Usuarios (manual)
 1. Ir a `SuperAdmin -> Usuarios`.

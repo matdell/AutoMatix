@@ -38,6 +38,25 @@ type CreatedBank = {
   admin?: { email?: string };
 };
 
+type ProvisioningTarget = 'VPS_MANAGED' | 'CUSTOMER_CLOUD' | 'ON_PREM';
+type ProvisioningStatus = 'REQUESTED' | 'RUNNING' | 'READY' | 'FAILED' | 'CANCELLED';
+
+type BankProvisioningRequest = {
+  id: string;
+  bankId: string;
+  target: ProvisioningTarget;
+  status: ProvisioningStatus;
+  provider?: string | null;
+  domain?: string | null;
+  apiDomain?: string | null;
+  region?: string | null;
+  config?: Record<string, unknown> | null;
+  notes?: string | null;
+  errorMessage?: string | null;
+  hasCredentials: boolean;
+  createdAt: string;
+};
+
 type BulkStatus = 'keep' | 'active' | 'inactive';
 
 type ModalProps = {
@@ -133,6 +152,27 @@ export default function SuperAdminBanksPage() {
   const [branchSaving, setBranchSaving] = useState(false);
   const [editingBranch, setEditingBranch] = useState<BankBranch | null>(null);
 
+  const [showProvisionModal, setShowProvisionModal] = useState(false);
+  const [provisioningBank, setProvisioningBank] = useState<Bank | null>(null);
+  const [provisioningRequests, setProvisioningRequests] = useState<BankProvisioningRequest[]>([]);
+  const [provisioningLoading, setProvisioningLoading] = useState(false);
+  const [provisioningSaving, setProvisioningSaving] = useState(false);
+  const [provisioningTarget, setProvisioningTarget] = useState<ProvisioningTarget>('VPS_MANAGED');
+  const [provisioningDomain, setProvisioningDomain] = useState('');
+  const [provisioningApiDomain, setProvisioningApiDomain] = useState('');
+  const [provisioningProvider, setProvisioningProvider] = useState('AWS');
+  const [provisioningRegion, setProvisioningRegion] = useState('');
+  const [vpsHost, setVpsHost] = useState('');
+  const [vpsSshUser, setVpsSshUser] = useState('');
+  const [vpsSshPort, setVpsSshPort] = useState('22');
+  const [vpsSshPrivateKey, setVpsSshPrivateKey] = useState('');
+  const [cloudRoleArn, setCloudRoleArn] = useState('');
+  const [cloudAccessKeyId, setCloudAccessKeyId] = useState('');
+  const [cloudSecretAccessKey, setCloudSecretAccessKey] = useState('');
+  const [onPremEndpoint, setOnPremEndpoint] = useState('');
+  const [onPremContactEmail, setOnPremContactEmail] = useState('');
+  const [provisioningNotes, setProvisioningNotes] = useState('');
+
   const isSuperAdmin = role === 'SUPERADMIN';
 
   useEffect(() => {
@@ -197,6 +237,49 @@ export default function SuperAdminBanksPage() {
     } finally {
       setBranchLoading((prev) => ({ ...prev, [bankId]: false }));
     }
+  };
+
+  const loadProvisioningRequests = async (bankId: string) => {
+    setProvisioningLoading(true);
+    try {
+      const data = await apiJson<BankProvisioningRequest[]>(
+        `/banks/${bankId}/provisioning-requests`,
+      );
+      setProvisioningRequests(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cargar el historial de provisionamiento');
+      setProvisioningRequests([]);
+    } finally {
+      setProvisioningLoading(false);
+    }
+  };
+
+  const openProvisionModal = async (bank: Bank) => {
+    setProvisioningBank(bank);
+    setProvisioningTarget('VPS_MANAGED');
+    setProvisioningDomain(`${bank.slug}.automatixpay.com`);
+    setProvisioningApiDomain(`${bank.slug}.automatixpay.com`);
+    setProvisioningProvider('AWS');
+    setProvisioningRegion('');
+    setVpsHost('');
+    setVpsSshUser('');
+    setVpsSshPort('22');
+    setVpsSshPrivateKey('');
+    setCloudRoleArn('');
+    setCloudAccessKeyId('');
+    setCloudSecretAccessKey('');
+    setOnPremEndpoint('');
+    setOnPremContactEmail('');
+    setProvisioningNotes('');
+    setShowProvisionModal(true);
+    await loadProvisioningRequests(bank.id);
+  };
+
+  const provisionStatusClass = (status: ProvisioningStatus) => {
+    if (status === 'READY') return 'bg-emerald-50 text-emerald-700';
+    if (status === 'FAILED' || status === 'CANCELLED') return 'bg-rose-50 text-rose-700';
+    if (status === 'RUNNING') return 'bg-amber-50 text-amber-700';
+    return 'bg-slate-100 text-slate-700';
   };
 
   useEffect(() => {
@@ -457,6 +540,69 @@ export default function SuperAdminBanksPage() {
       setError(err instanceof Error ? err.message : 'No se pudo actualizar la sucursal');
     } finally {
       setBranchSaving(false);
+    }
+  };
+
+  const onCreateProvisioningRequest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!provisioningBank) return;
+
+    const config: Record<string, unknown> = {};
+    const credentials: Record<string, unknown> = {};
+
+    if (provisioningTarget === 'VPS_MANAGED') {
+      config.host = vpsHost.trim();
+      config.sshPort = Number(vpsSshPort || '22');
+      credentials.sshUser = vpsSshUser.trim();
+      if (vpsSshPrivateKey.trim()) {
+        credentials.sshPrivateKey = vpsSshPrivateKey.trim();
+      }
+    }
+
+    if (provisioningTarget === 'CUSTOMER_CLOUD') {
+      if (cloudRoleArn.trim()) {
+        credentials.roleArn = cloudRoleArn.trim();
+      }
+      if (cloudAccessKeyId.trim()) {
+        credentials.accessKeyId = cloudAccessKeyId.trim();
+      }
+      if (cloudSecretAccessKey.trim()) {
+        credentials.secretAccessKey = cloudSecretAccessKey.trim();
+      }
+    }
+
+    if (provisioningTarget === 'ON_PREM') {
+      config.endpoint = onPremEndpoint.trim();
+      if (onPremContactEmail.trim()) {
+        config.contactEmail = onPremContactEmail.trim();
+      }
+    }
+
+    const payload = {
+      target: provisioningTarget,
+      domain: provisioningDomain.trim(),
+      apiDomain: provisioningApiDomain.trim(),
+      provider: provisioningTarget === 'CUSTOMER_CLOUD' ? provisioningProvider.trim() : undefined,
+      region: provisioningRegion.trim() || undefined,
+      config,
+      credentials,
+      notes: provisioningNotes.trim() || undefined,
+    };
+
+    setProvisioningSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await apiJson(`/banks/${provisioningBank.id}/provisioning-requests`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      setSuccess('Solicitud de provisionamiento creada. Quedo en cola con estado REQUESTED.');
+      await loadProvisioningRequests(provisioningBank.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo crear la solicitud de provisionamiento');
+    } finally {
+      setProvisioningSaving(false);
     }
   };
 
@@ -775,6 +921,13 @@ export default function SuperAdminBanksPage() {
                             </td>
                             <td className="px-6 py-4 text-right">
                               <div className="flex items-center justify-end gap-3">
+                                <button
+                                  type="button"
+                                  className="text-xs font-bold text-slate-700 hover:underline"
+                                  onClick={() => openProvisionModal(bank)}
+                                >
+                                  Provisionar
+                                </button>
                                 <button
                                   type="button"
                                   className="text-xs font-bold text-primary hover:underline"
@@ -1390,6 +1543,252 @@ export default function SuperAdminBanksPage() {
             {branchSaving ? 'Guardando...' : 'Guardar cambios'}
           </button>
         </form>
+      </Modal>
+
+      <Modal
+        open={showProvisionModal}
+        title={`Provisionar entorno${provisioningBank ? ` - ${provisioningBank.nombre}` : ''}`}
+        onClose={() => setShowProvisionModal(false)}
+      >
+        <form onSubmit={onCreateProvisioningRequest} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Destino
+              </label>
+              <select
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={provisioningTarget}
+                onChange={(event) => setProvisioningTarget(event.target.value as ProvisioningTarget)}
+              >
+                <option value="VPS_MANAGED">VPS gestionado</option>
+                <option value="CUSTOMER_CLOUD">Cloud cliente (AWS/Azure/GCP)</option>
+                <option value="ON_PREM">On-prem</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Region
+              </label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={provisioningRegion}
+                onChange={(event) => setProvisioningRegion(event.target.value)}
+                placeholder="us-east-1 / sa-east-1 / on-prem"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Dominio Web
+              </label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={provisioningDomain}
+                onChange={(event) => setProvisioningDomain(event.target.value)}
+                placeholder="bank1.automatixpay.com"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Dominio API
+              </label>
+              <input
+                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                value={provisioningApiDomain}
+                onChange={(event) => setProvisioningApiDomain(event.target.value)}
+                placeholder="bank1.automatixpay.com"
+                required
+              />
+            </div>
+          </div>
+
+          {provisioningTarget === 'VPS_MANAGED' ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                  VPS Host
+                </label>
+                <input
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                  value={vpsHost}
+                  onChange={(event) => setVpsHost(event.target.value)}
+                  placeholder="74.208.218.120"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                  SSH User
+                </label>
+                <input
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                  value={vpsSshUser}
+                  onChange={(event) => setVpsSshUser(event.target.value)}
+                  placeholder="matias"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                  SSH Port
+                </label>
+                <input
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                  value={vpsSshPort}
+                  onChange={(event) => setVpsSshPort(event.target.value)}
+                  placeholder="22"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                  SSH Private Key (opcional)
+                </label>
+                <textarea
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm min-h-24"
+                  value={vpsSshPrivateKey}
+                  onChange={(event) => setVpsSshPrivateKey(event.target.value)}
+                  placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {provisioningTarget === 'CUSTOMER_CLOUD' ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                  Provider
+                </label>
+                <select
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                  value={provisioningProvider}
+                  onChange={(event) => setProvisioningProvider(event.target.value)}
+                >
+                  <option value="AWS">AWS</option>
+                  <option value="AZURE">Azure</option>
+                  <option value="GCP">GCP</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                  Role ARN
+                </label>
+                <input
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                  value={cloudRoleArn}
+                  onChange={(event) => setCloudRoleArn(event.target.value)}
+                  placeholder="arn:aws:iam::123:role/Provisioner"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                  Access Key ID
+                </label>
+                <input
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                  value={cloudAccessKeyId}
+                  onChange={(event) => setCloudAccessKeyId(event.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                  Secret Access Key
+                </label>
+                <input
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                  value={cloudSecretAccessKey}
+                  onChange={(event) => setCloudSecretAccessKey(event.target.value)}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {provisioningTarget === 'ON_PREM' ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                  Endpoint / Bastion
+                </label>
+                <input
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                  value={onPremEndpoint}
+                  onChange={(event) => setOnPremEndpoint(event.target.value)}
+                  placeholder="vpn.bank.local:22"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                  Contacto tecnico
+                </label>
+                <input
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                  value={onPremContactEmail}
+                  onChange={(event) => setOnPremContactEmail(event.target.value)}
+                  placeholder="infra@banco.com"
+                />
+              </div>
+            </div>
+          ) : null}
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+              Notas operativas
+            </label>
+            <textarea
+              className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm min-h-20"
+              value={provisioningNotes}
+              onChange={(event) => setProvisioningNotes(event.target.value)}
+              placeholder="Window de deploy, observaciones, constraints de red..."
+            />
+          </div>
+
+          <button
+            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-300"
+            type="submit"
+            disabled={provisioningSaving}
+          >
+            {provisioningSaving ? 'Guardando solicitud...' : 'Crear solicitud de provisionamiento'}
+          </button>
+        </form>
+
+        <div className="mt-6 border-t border-slate-200/70 pt-4">
+          <h3 className="text-sm font-semibold text-slate-900 mb-3">Historial de solicitudes</h3>
+          {provisioningLoading ? (
+            <div className="text-sm text-slate-500">Cargando...</div>
+          ) : provisioningRequests.length === 0 ? (
+            <div className="text-sm text-slate-500">Sin solicitudes para este banco.</div>
+          ) : (
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              {provisioningRequests.map((item) => (
+                <div key={item.id} className="rounded-lg border border-slate-200/70 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs text-slate-600">
+                      {new Date(item.createdAt).toLocaleString('es-AR')}
+                    </div>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${provisionStatusClass(item.status)}`}
+                    >
+                      {item.status}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-sm text-slate-800">
+                    {item.target}
+                    {item.provider ? ` • ${item.provider}` : ''}
+                    {item.domain ? ` • ${item.domain}` : ''}
+                  </div>
+                  {item.errorMessage ? (
+                    <div className="mt-1 text-xs text-rose-700">{item.errorMessage}</div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </Modal>
     </AppShell>
   );

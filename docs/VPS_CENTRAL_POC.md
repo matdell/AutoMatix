@@ -57,6 +57,10 @@ Checklist operativo actual (manual):
    - Healthcheck de API.
    - Sync cron (`scripts/sync-pull-cron.sh`) si aplica.
 
+Variables recomendadas para provisioning:
+- `PROVISIONING_CREDENTIALS_KEY` (recomendado): clave para cifrar credenciales de provisioning en DB.
+  - Si no se define, el sistema usa `JWT_SECRET` como fallback.
+
 ## Certificados
 - Certificados publicos: Let's Encrypt por dominio.
 - mTLS: CA interna para validar clientes en /sync/*.
@@ -94,6 +98,20 @@ Endpoints en Bank API (requiere JWT de SUPERADMIN o BANK_ADMIN):
   - body: { entity, cursor?, bankId? }
 - POST /api/sync/ack
   - body: { entity, batchId, cursor?, status?, error?, bankId? }
+
+## Provisioning API (SuperAdmin)
+Endpoints para registrar y seguir solicitudes de provisionamiento por banco:
+- `GET /api/banks/:bankId/provisioning-requests`
+- `POST /api/banks/:bankId/provisioning-requests`
+  - body:
+    - `target`: `VPS_MANAGED | CUSTOMER_CLOUD | ON_PREM`
+    - `domain`, `apiDomain`
+    - `provider?`, `region?`
+    - `config` (JSON por tipo de target)
+    - `credentials` (JSON sensible, guardado cifrado en DB)
+    - `notes?`
+- `PATCH /api/banks/:bankId/provisioning-requests/:requestId/status`
+  - body: `{ status, notes?, errorMessage? }`
 
 ## Notas
 - El secreto HMAC del sync se define en runtime via env `SYNC_HMAC_SECRET`.

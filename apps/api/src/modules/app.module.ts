@@ -17,6 +17,7 @@ import { StorageModule } from './storage/storage.module';
 import { PlacesModule } from './places/places.module';
 import { DocusignModule } from './docusign/docusign.module';
 import { SyncModule } from './sync/sync.module';
+import { BankProvisioningModule } from './bank-provisioning/bank-provisioning.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { SyncModule } from './sync/sync.module';
     PlacesModule,
     DocusignModule,
     SyncModule,
+    BankProvisioningModule,
   ],
 })
 export class AppModule {}
