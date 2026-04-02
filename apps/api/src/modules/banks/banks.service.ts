@@ -5,7 +5,7 @@ import { UpdateBankDto } from './dto/update-bank.dto';
 import { UpdateBankSuperadminDto } from './dto/update-bank-superadmin.dto';
 import bcrypt from 'bcryptjs';
 import { AuditService } from '../audit/audit.service';
-import { AuditAction, Role } from '@prisma/client';
+import { AuditAction, ProvisioningStatus, Role } from '@prisma/client';
 
 @Injectable()
 export class BanksService {
@@ -45,7 +45,7 @@ export class BanksService {
   }
 
   async list() {
-    return this.prisma.bank.findMany({
+    const banks = await this.prisma.bank.findMany({
       select: {
         id: true,
         nombre: true,
@@ -54,14 +54,37 @@ export class BanksService {
         cuit: true,
         direccionCasaMatriz: true,
         slug: true,
+        logoUrl: true,
         activo: true,
         paymentMethods: true,
         bines: true,
         fechaAlta: true,
         createdAt: true,
+        provisioningRequests: {
+          where: {
+            status: ProvisioningStatus.READY,
+            OR: [{ domain: { not: null } }, { apiDomain: { not: null } }],
+          },
+          select: {
+            domain: true,
+            apiDomain: true,
+            processedAt: true,
+            createdAt: true,
+          },
+          orderBy: [{ processedAt: 'desc' }, { createdAt: 'desc' }],
+          take: 1,
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    return banks.map(({ provisioningRequests, ...bank }) => ({
+      ...bank,
+      provisionedDomain: provisioningRequests[0]?.domain ?? null,
+      provisionedApiDomain: provisioningRequests[0]?.apiDomain ?? null,
+      provisionedAt:
+        provisioningRequests[0]?.processedAt ?? provisioningRequests[0]?.createdAt ?? null,
+    }));
   }
 
   async getCurrent(tenantId: string) {

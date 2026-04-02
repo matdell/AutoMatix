@@ -13,10 +13,14 @@ type Bank = {
   cuit?: string | null;
   direccionCasaMatriz?: string | null;
   slug: string;
+  logoUrl?: string | null;
   activo?: boolean;
   paymentMethods?: string[];
   bines?: string[];
   fechaAlta?: string | null;
+  provisionedDomain?: string | null;
+  provisionedApiDomain?: string | null;
+  provisionedAt?: string | null;
   createdAt: string;
 };
 
@@ -709,6 +713,15 @@ export default function SuperAdminBanksPage() {
   const formatDisplayDate = (value?: string | null) =>
     value ? dateFormatter.format(new Date(value)) : '-';
 
+  const resolveBankEnvironmentUrl = (bank: Bank) => {
+    const raw = bank.provisionedDomain?.trim() || bank.provisionedApiDomain?.trim();
+    if (!raw) return null;
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return raw;
+    }
+    return `https://${raw}`;
+  };
+
   return (
     <AppShell>
       <header className="fixed top-0 left-[var(--sidebar-width)] right-0 h-16 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/15 flex items-center justify-between px-8 shadow-[0px_12px_32px_rgba(42,52,57,0.06)] font-['Inter'] antialiased tracking-tight">
@@ -841,6 +854,9 @@ export default function SuperAdminBanksPage() {
                         Slug
                       </th>
                       <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                        Entorno
+                      </th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
                         Creado
                       </th>
                       <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
@@ -860,14 +876,14 @@ export default function SuperAdminBanksPage() {
                   <tbody className="divide-y divide-slate-50">
                     {loadingBanks ? (
                       <tr>
-                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={9}>
+                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={10}>
                           Cargando bancos...
                         </td>
                       </tr>
                     ) : null}
                     {loadingBanks === false && paginatedBanks.length === 0 ? (
                       <tr>
-                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={9}>
+                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={10}>
                           No hay bancos para este filtro.
                         </td>
                       </tr>
@@ -879,6 +895,14 @@ export default function SuperAdminBanksPage() {
                       const hasCachedBranches = Object.prototype.hasOwnProperty.call(branchCache, bank.id);
                       const isActive = bank.activo !== false;
                       const isSelected = selectedBankIds.includes(bank.id);
+                      const environmentUrl = resolveBankEnvironmentUrl(bank);
+                      const logoFallback = bank.nombre
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((part) => part[0])
+                        .join('')
+                        .toUpperCase();
                       return (
                         <>
                           <tr
@@ -916,19 +940,56 @@ export default function SuperAdminBanksPage() {
                               </button>
                             </td>
                             <td className="px-6 py-4">
-                              <div className="text-sm text-on-surface font-semibold">{bank.nombre}</div>
-                              {bank.nombreCompleto ? (
-                                <div className="text-xs text-on-surface-variant">{bank.nombreCompleto}</div>
-                              ) : null}
-                              {bank.razonSocial || bank.cuit ? (
-                                <div className="text-xs text-on-surface-variant">
-                                  {bank.razonSocial ? `RS ${bank.razonSocial}` : null}
-                                  {bank.razonSocial && bank.cuit ? ' • ' : null}
-                                  {bank.cuit ? `CUIT ${bank.cuit}` : null}
+                              <div className="flex items-start gap-3">
+                                <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100 text-[10px] font-bold uppercase text-slate-500">
+                                  <span>{logoFallback || 'BK'}</span>
+                                  {bank.logoUrl ? (
+                                    <img
+                                      src={bank.logoUrl}
+                                      alt={`Logo ${bank.nombre}`}
+                                      className="absolute inset-0 h-full w-full object-cover"
+                                      onError={(event) => {
+                                        event.currentTarget.style.display = 'none';
+                                      }}
+                                    />
+                                  ) : null}
                                 </div>
-                              ) : null}
+                                <div>
+                                  <div className="text-sm text-on-surface font-semibold">{bank.nombre}</div>
+                                  {bank.nombreCompleto ? (
+                                    <div className="text-xs text-on-surface-variant">{bank.nombreCompleto}</div>
+                                  ) : null}
+                                  {bank.razonSocial || bank.cuit ? (
+                                    <div className="text-xs text-on-surface-variant">
+                                      {bank.razonSocial ? `RS ${bank.razonSocial}` : null}
+                                      {bank.razonSocial && bank.cuit ? ' • ' : null}
+                                      {bank.cuit ? `CUIT ${bank.cuit}` : null}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
                             </td>
                             <td className="px-6 py-4 text-sm text-on-surface-variant">{bank.slug}</td>
+                            <td className="px-6 py-4">
+                              {environmentUrl ? (
+                                <div className="space-y-1">
+                                  <a
+                                    href={environmentUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
+                                  >
+                                    Abrir entorno
+                                    <span className="material-symbols-outlined text-sm">open_in_new</span>
+                                  </a>
+                                  <div className="text-[11px] text-on-surface-variant">
+                                    {bank.provisionedDomain || bank.provisionedApiDomain}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-xs text-on-surface-variant">No provisionado</div>
+                              )}
+                            </td>
                             <td className="px-6 py-4 text-sm text-on-surface-variant">
                               {dateFormatter.format(new Date(bank.createdAt))}
                             </td>
@@ -990,7 +1051,7 @@ export default function SuperAdminBanksPage() {
                           </tr>
                           {expanded ? (
                             <tr key={`${bank.id}-branches`}>
-                              <td colSpan={9} className="px-6 pb-6">
+                              <td colSpan={10} className="px-6 pb-6">
                                 <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-4">
                                   <div className="flex items-center justify-between mb-4">
                                     <h3 className="text-sm font-semibold text-slate-900">Sucursales</h3>

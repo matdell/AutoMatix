@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import AutoMatixLogo from './AutoMatixLogo';
-import { clearToken } from '@/lib/api';
+import { apiJson, clearToken } from '@/lib/api';
 
 type NavItem = {
   href: string;
@@ -43,6 +43,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [bankLogoUrl, setBankLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const raw = window.localStorage.getItem('user');
@@ -54,6 +55,28 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       setUserRole(null);
     }
   }, []);
+
+  useEffect(() => {
+    if (!userRole || userRole === 'SUPERADMIN') {
+      setBankLogoUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+    void apiJson<{ logoUrl?: string | null }>('/banks/me')
+      .then((bank) => {
+        if (cancelled) return;
+        setBankLogoUrl(bank.logoUrl ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setBankLogoUrl(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userRole]);
 
   const primaryItems = useMemo(() => baseItems, []);
 
@@ -105,7 +128,19 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       ].join(' ')}
     >
       <div className={['px-2 mb-8 mt-2 flex items-center', collapsed ? 'justify-center' : ''].join(' ')}>
-        <AutoMatixLogo className={collapsed ? 'h-10 w-16' : 'h-12 w-full'} showSubtitle={!collapsed} />
+        {bankLogoUrl ? (
+          <img
+            src={bankLogoUrl}
+            alt="Logo del banco"
+            className={collapsed ? 'h-10 w-10 rounded-lg object-cover' : 'h-12 w-full rounded-lg object-contain'}
+            onError={(event) => {
+              event.currentTarget.style.display = 'none';
+              setBankLogoUrl(null);
+            }}
+          />
+        ) : (
+          <AutoMatixLogo className={collapsed ? 'h-10 w-16' : 'h-12 w-full'} showSubtitle={!collapsed} />
+        )}
       </div>
 
       <nav className="flex-1 space-y-1">
