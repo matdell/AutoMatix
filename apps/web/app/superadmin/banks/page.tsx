@@ -39,6 +39,7 @@ type CreatedBank = {
 };
 
 type ProvisioningTarget = 'VPS_MANAGED' | 'CUSTOMER_CLOUD' | 'ON_PREM';
+type VpsProvisioningMode = 'THIS_VPS' | 'CUSTOM';
 type ProvisioningStatus = 'REQUESTED' | 'RUNNING' | 'READY' | 'FAILED' | 'CANCELLED';
 
 type BankProvisioningRequest = {
@@ -163,6 +164,7 @@ export default function SuperAdminBanksPage() {
   const [provisioningApiDomain, setProvisioningApiDomain] = useState('');
   const [provisioningProvider, setProvisioningProvider] = useState('AWS');
   const [provisioningRegion, setProvisioningRegion] = useState('');
+  const [vpsProvisioningMode, setVpsProvisioningMode] = useState<VpsProvisioningMode>('THIS_VPS');
   const [vpsHost, setVpsHost] = useState('');
   const [vpsSshUser, setVpsSshUser] = useState('');
   const [vpsSshPort, setVpsSshPort] = useState('22');
@@ -277,6 +279,7 @@ export default function SuperAdminBanksPage() {
     setProvisioningApiDomain(`${bank.slug}.automatixpay.com`);
     setProvisioningProvider('AWS');
     setProvisioningRegion('');
+    setVpsProvisioningMode('THIS_VPS');
     setVpsHost('');
     setVpsSshUser('');
     setVpsSshPort('22');
@@ -575,13 +578,18 @@ export default function SuperAdminBanksPage() {
     const credentials: Record<string, unknown> = {};
 
     if (provisioningTarget === 'VPS_MANAGED') {
-      config.host = vpsHost.trim();
-      config.sshPort = Number(vpsSshPort || '22');
-      if (vpsSshUser.trim()) {
-        credentials.sshUser = vpsSshUser.trim();
-      }
-      if (vpsSshPrivateKey.trim()) {
-        credentials.sshPrivateKey = vpsSshPrivateKey.trim();
+      if (vpsProvisioningMode === 'THIS_VPS') {
+        config.host = '127.0.0.1';
+        config.sshPort = 22;
+      } else {
+        config.host = vpsHost.trim();
+        config.sshPort = Number(vpsSshPort || '22');
+        if (vpsSshUser.trim()) {
+          credentials.sshUser = vpsSshUser.trim();
+        }
+        if (vpsSshPrivateKey.trim()) {
+          credentials.sshPrivateKey = vpsSshPrivateKey.trim();
+        }
       }
     }
 
@@ -1633,52 +1641,74 @@ export default function SuperAdminBanksPage() {
           </div>
 
           {provisioningTarget === 'VPS_MANAGED' ? (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-4">
               <div>
                 <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-                  VPS Host
+                  Modo VPS
                 </label>
-                <input
+                <select
                   className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                  value={vpsHost}
-                  onChange={(event) => setVpsHost(event.target.value)}
-                  placeholder="74.208.218.120"
-                  required
-                />
+                  value={vpsProvisioningMode}
+                  onChange={(event) => setVpsProvisioningMode(event.target.value as VpsProvisioningMode)}
+                >
+                  <option value="THIS_VPS">Este VPS (automatico)</option>
+                  <option value="CUSTOM">Otro VPS (manual SSH)</option>
+                </select>
               </div>
-              <div>
-                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-                  SSH User (opcional si host es local)
-                </label>
-                <input
-                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                  value={vpsSshUser}
-                  onChange={(event) => setVpsSshUser(event.target.value)}
-                  placeholder="matias"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-                  SSH Port
-                </label>
-                <input
-                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                  value={vpsSshPort}
-                  onChange={(event) => setVpsSshPort(event.target.value)}
-                  placeholder="22"
-                />
-              </div>
-              <div className="col-span-2">
-                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-                  SSH Private Key (opcional)
-                </label>
-                <textarea
-                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm min-h-24"
-                  value={vpsSshPrivateKey}
-                  onChange={(event) => setVpsSshPrivateKey(event.target.value)}
-                  placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
-                />
-              </div>
+
+              {vpsProvisioningMode === 'THIS_VPS' ? (
+                <div className="rounded-xl bg-slate-100/80 px-4 py-3 text-xs text-slate-700">
+                  Se provisiona en el mismo servidor donde corre la plataforma. No requiere IP, usuario ni clave SSH.
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                      VPS Host
+                    </label>
+                    <input
+                      className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                      value={vpsHost}
+                      onChange={(event) => setVpsHost(event.target.value)}
+                      placeholder="74.208.218.120"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                      SSH User (opcional si host es local)
+                    </label>
+                    <input
+                      className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                      value={vpsSshUser}
+                      onChange={(event) => setVpsSshUser(event.target.value)}
+                      placeholder="matias"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                      SSH Port
+                    </label>
+                    <input
+                      className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                      value={vpsSshPort}
+                      onChange={(event) => setVpsSshPort(event.target.value)}
+                      placeholder="22"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                      SSH Private Key (opcional)
+                    </label>
+                    <textarea
+                      className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm min-h-24"
+                      value={vpsSshPrivateKey}
+                      onChange={(event) => setVpsSshPrivateKey(event.target.value)}
+                      placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           ) : null}
 
