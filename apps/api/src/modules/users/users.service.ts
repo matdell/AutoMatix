@@ -3,6 +3,7 @@ import { PrismaService } from '../common/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction, Prisma, Role } from '@prisma/client';
+import { isCentralPlatformMode } from '../common/platform-mode';
 
 const bankBranchRoles = new Set<Role>([Role.BANK_BRANCH_MANAGER, Role.BANK_BRANCH_OPERATOR]);
 const brandRoles = new Set<Role>([Role.BRAND_ADMIN]);
@@ -31,6 +32,9 @@ export class UsersService {
       pointOfSaleId?: string | null;
     },
   ): Promise<Prisma.UserWhereInput> {
+    if (scope?.role === Role.SUPERADMIN && isCentralPlatformMode()) {
+      return { tenantId, role: Role.SUPERADMIN };
+    }
     if (!scope || bankWideRoles.has(scope.role)) {
       return { tenantId };
     }
@@ -209,7 +213,10 @@ export class UsersService {
     if (dto.role === Role.SUPERADMIN && actorRole !== Role.SUPERADMIN) {
       throw new ForbiddenException('No autorizado para asignar SuperAdmin');
     }
-    if (actorScope && !bankWideRoles.has(actorScope.role)) {
+    if (
+      actorScope &&
+      (!bankWideRoles.has(actorScope.role) || (actorScope.role === Role.SUPERADMIN && isCentralPlatformMode()))
+    ) {
       const scopeWhere = await this.buildScopeWhere(tenantId, actorScope);
       const allowed = await this.prisma.user.findFirst({
         where: { AND: [scopeWhere, { id }] },
@@ -413,7 +420,10 @@ export class UsersService {
     },
     actorId?: string,
   ) {
-    if (actorScope && !bankWideRoles.has(actorScope.role)) {
+    if (
+      actorScope &&
+      (!bankWideRoles.has(actorScope.role) || (actorScope.role === Role.SUPERADMIN && isCentralPlatformMode()))
+    ) {
       const scopeWhere = await this.buildScopeWhere(tenantId, actorScope);
       const allowed = await this.prisma.user.findFirst({
         where: { AND: [scopeWhere, { id }] },

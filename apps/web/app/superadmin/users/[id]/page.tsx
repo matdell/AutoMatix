@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import AppShell from '@/app/_components/AppShell';
 import { apiJson, getToken } from '@/lib/api';
+import { isCurrentCentralHost } from '@/lib/platform';
 
 type BankBranch = {
   id: string;
@@ -91,6 +92,7 @@ export default function SuperAdminUserDetailPage() {
   const userId = params?.id as string;
 
   const [role, setRole] = useState<string | null>(null);
+  const [isCentralHost, setIsCentralHost] = useState(false);
   const [bankId, setBankId] = useState('');
   const [user, setUser] = useState<User | null>(null);
   const [bankBranches, setBankBranches] = useState<BankBranch[]>([]);
@@ -112,6 +114,7 @@ export default function SuperAdminUserDetailPage() {
   const [userActive, setUserActive] = useState(true);
 
   const isSuperAdmin = role === 'SUPERADMIN';
+  const isCentralSuperAdmin = isSuperAdmin && isCentralHost;
   const needsBranch = branchRoles.has(userRole);
   const isBrandRole = brandRoles.has(userRole);
   const isLegalEntityRole = legalEntityRoles.has(userRole);
@@ -156,6 +159,7 @@ export default function SuperAdminUserDetailPage() {
       router.push('/login');
       return;
     }
+    setIsCentralHost(isCurrentCentralHost());
     const raw = window.localStorage.getItem('user');
     if (!raw) return;
     try {
@@ -167,10 +171,14 @@ export default function SuperAdminUserDetailPage() {
   }, [router]);
 
   useEffect(() => {
+    if (isCentralHost) {
+      setBankId('');
+      return;
+    }
     const queryBankId = searchParams.get('bankId');
     const stored = window.localStorage.getItem('superadmin-bank-id');
     setBankId(queryBankId || stored || '');
-  }, [searchParams]);
+  }, [searchParams, isCentralHost]);
 
   const loadBranches = async (resolvedBankId: string) => {
     if (!resolvedBankId) return;
@@ -239,12 +247,16 @@ export default function SuperAdminUserDetailPage() {
 
   useEffect(() => {
     if (!isSuperAdmin) return;
+    if (isCentralSuperAdmin) {
+      loadUser('');
+      return;
+    }
     if (!bankId) return;
     loadUser(bankId);
     loadBranches(bankId);
     loadBrands(bankId);
     loadMerchants(bankId);
-  }, [isSuperAdmin, bankId]);
+  }, [isSuperAdmin, bankId, isCentralSuperAdmin]);
 
   useEffect(() => {
     if (!isPointOfSaleRole) {
@@ -270,35 +282,37 @@ export default function SuperAdminUserDetailPage() {
       const payload: Record<string, unknown> = {
         nombre: userNombre.trim(),
         email: userEmail.trim(),
-        role: userRole,
+        role: isCentralSuperAdmin ? 'SUPERADMIN' : userRole,
         isActive: userActive,
       };
-      if (needsBranch) {
+      if (!isCentralSuperAdmin && needsBranch) {
         payload.bankBranchId = userBankBranchId || undefined;
-      } else {
+      } else if (!isCentralSuperAdmin) {
         payload.bankBranchId = '';
       }
-      if (isBrandRole) {
+      if (!isCentralSuperAdmin && isBrandRole) {
         payload.brandId = userBrandId.trim() || undefined;
-      } else {
+      } else if (!isCentralSuperAdmin) {
         payload.brandId = '';
       }
-      if (isLegalEntityRole || isPointOfSaleRole) {
+      if (!isCentralSuperAdmin && (isLegalEntityRole || isPointOfSaleRole)) {
         payload.merchantId = userMerchantId.trim() || undefined;
-      } else {
+      } else if (!isCentralSuperAdmin) {
         payload.merchantId = '';
       }
-      if (isPointOfSaleRole) {
+      if (!isCentralSuperAdmin && isPointOfSaleRole) {
         payload.pointOfSaleId = userPointOfSaleId.trim() || undefined;
-      } else {
+      } else if (!isCentralSuperAdmin) {
         payload.pointOfSaleId = '';
       }
-      await apiJson(`/users/${user.id}?bankId=${bankId}`, {
+      const updatePath =
+        !isCentralSuperAdmin && bankId ? `/users/${user.id}?bankId=${bankId}` : `/users/${user.id}`;
+      await apiJson(updatePath, {
         method: 'PATCH',
         body: JSON.stringify(payload),
       });
       setSuccess('Usuario actualizado.');
-      await loadUser(bankId);
+      await loadUser(isCentralSuperAdmin ? '' : bankId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo actualizar el usuario');
     } finally {
@@ -313,9 +327,10 @@ export default function SuperAdminUserDetailPage() {
     setError(null);
     setSuccess(null);
     try {
-      await apiJson(`/users/${user.id}?bankId=${bankId}`, { method: 'DELETE' });
+      const path = !isCentralSuperAdmin && bankId ? `/users/${user.id}?bankId=${bankId}` : `/users/${user.id}`;
+      await apiJson(path, { method: 'DELETE' });
       setSuccess('Usuario desactivado.');
-      await loadUser(bankId);
+      await loadUser(isCentralSuperAdmin ? '' : bankId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo desactivar el usuario');
     }
@@ -350,7 +365,7 @@ export default function SuperAdminUserDetailPage() {
           <div className="text-sm text-error bg-error-container/30 px-4 py-3 rounded-xl">
             No tienes permisos para acceder a esta seccion.
           </div>
-        ) : !bankId ? (
+        ) : !isCentralSuperAdmin && !bankId ? (
           <div className="text-sm text-on-surface-variant bg-surface-container-low rounded-xl px-4 py-3">
             Selecciona un banco desde la lista de usuarios para ver el detalle.
           </div>
@@ -371,7 +386,8 @@ export default function SuperAdminUserDetailPage() {
                   <div className="flex flex-col gap-2">
                     <h2 className="text-lg font-semibold text-on-surface">{user.nombre}</h2>
                     <p className="text-sm text-on-surface-variant">
-                      {user.bank?.nombre ?? 'Banco'} - {roleLabels[user.role] ?? user.role}
+                      {isCentralSuperAdmin ? 'Plataforma central' : user.bank?.nombre ?? 'Banco'} -{' '}
+                      {roleLabels[user.role] ?? user.role}
                     </p>
                     <p className="text-xs text-on-surface-variant">
                       Ultimo acceso:{' '}
@@ -407,7 +423,7 @@ export default function SuperAdminUserDetailPage() {
                           value={userRole}
                           onChange={(event) => setUserRole(event.target.value)}
                         >
-                          {roleOptions.map((roleOption) => (
+                          {(isCentralSuperAdmin ? ['SUPERADMIN'] : roleOptions).map((roleOption) => (
                             <option key={roleOption} value={roleOption}>
                               {roleLabels[roleOption] ?? roleOption}
                             </option>
@@ -428,7 +444,7 @@ export default function SuperAdminUserDetailPage() {
                           <option value="inactive">Inactivo</option>
                         </select>
                       </div>
-                      {needsBranch ? (
+                      {!isCentralSuperAdmin && needsBranch ? (
                         <div>
                           <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
                             Sucursal bancaria
@@ -450,7 +466,7 @@ export default function SuperAdminUserDetailPage() {
                           </select>
                         </div>
                       ) : null}
-                      {isBrandRole ? (
+                      {!isCentralSuperAdmin && isBrandRole ? (
                         <div>
                           <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Marca</label>
                           <select
@@ -468,7 +484,7 @@ export default function SuperAdminUserDetailPage() {
                           </select>
                         </div>
                       ) : null}
-                      {isLegalEntityRole || isPointOfSaleRole ? (
+                      {!isCentralSuperAdmin && (isLegalEntityRole || isPointOfSaleRole) ? (
                         <div>
                           <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
                             Razon social
@@ -488,7 +504,7 @@ export default function SuperAdminUserDetailPage() {
                           </select>
                         </div>
                       ) : null}
-                      {isPointOfSaleRole ? (
+                      {!isCentralSuperAdmin && isPointOfSaleRole ? (
                         <div>
                           <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
                             Punto de venta

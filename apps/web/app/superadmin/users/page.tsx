@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AppShell from '@/app/_components/AppShell';
 import { apiFetch, apiJson, getToken } from '@/lib/api';
+import { isCurrentCentralHost } from '@/lib/platform';
 
 type Bank = {
   id: string;
@@ -103,6 +104,7 @@ const statusPill = (active: boolean) =>
 export default function SuperAdminUsersPage() {
   const router = useRouter();
   const [role, setRole] = useState<string | null>(null);
+  const [isCentralHost, setIsCentralHost] = useState(false);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [selectedBankId, setSelectedBankId] = useState('');
   const [bankBranches, setBankBranches] = useState<BankBranch[]>([]);
@@ -135,6 +137,7 @@ export default function SuperAdminUsersPage() {
   const [userActive, setUserActive] = useState(true);
 
   const isSuperAdmin = role === 'SUPERADMIN';
+  const isCentralSuperAdmin = isSuperAdmin && isCentralHost;
   const needsBranch = branchRoles.has(userRole);
   const isBrandRole = brandRoles.has(userRole);
   const isLegalEntityRole = legalEntityRoles.has(userRole);
@@ -184,6 +187,7 @@ export default function SuperAdminUsersPage() {
       router.push('/login');
       return;
     }
+    setIsCentralHost(isCurrentCentralHost());
     const raw = window.localStorage.getItem('user');
     if (!raw) return;
     try {
@@ -209,11 +213,12 @@ export default function SuperAdminUsersPage() {
     }
   };
 
-  const loadUsers = async (bankId: string) => {
+  const loadUsers = async (bankId?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiJson<User[]>(`/users?bankId=${bankId}`);
+      const query = bankId ? `?bankId=${encodeURIComponent(bankId)}` : '';
+      const data = await apiJson<User[]>(`/users${query}`);
       setUsers(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudieron cargar los usuarios');
@@ -268,17 +273,24 @@ export default function SuperAdminUsersPage() {
 
   useEffect(() => {
     if (!isSuperAdmin) return;
+    if (isCentralSuperAdmin) {
+      setBanks([]);
+      setSelectedBankId('');
+      void loadUsers();
+      return;
+    }
     loadBanks();
-  }, [isSuperAdmin]);
+  }, [isSuperAdmin, isCentralSuperAdmin]);
 
   useEffect(() => {
+    if (isCentralSuperAdmin) return;
     if (!isSuperAdmin || !selectedBankId) return;
     window.localStorage.setItem('superadmin-bank-id', selectedBankId);
     loadUsers(selectedBankId);
     loadBranches(selectedBankId);
     loadBrands(selectedBankId);
     loadMerchants(selectedBankId);
-  }, [isSuperAdmin, selectedBankId]);
+  }, [isSuperAdmin, selectedBankId, isCentralSuperAdmin]);
 
   useEffect(() => {
     if (!isPointOfSaleRole) {
@@ -306,6 +318,9 @@ export default function SuperAdminUsersPage() {
   }, [userView]);
 
   const filteredUsers = useMemo(() => {
+    if (isCentralSuperAdmin) {
+      return users.filter((user) => user.role === 'SUPERADMIN');
+    }
     const isCommercial = userView === 'commercial';
     const base = isCommercial
       ? users.filter((user) => Boolean(user.brandId || user.merchantId || user.pointOfSaleId))
@@ -325,7 +340,7 @@ export default function SuperAdminUsersPage() {
       default:
         return base;
     }
-  }, [users, userFilter, userView]);
+  }, [users, userFilter, userView, isCentralSuperAdmin]);
 
   const paginatedUsers = useMemo(() => {
     const start = (userPage - 1) * userPageSize;
@@ -344,7 +359,7 @@ export default function SuperAdminUsersPage() {
     setUserNombre('');
     setUserEmail('');
     setUserPassword('');
-    setUserRole(userView === 'commercial' ? 'BRAND_ADMIN' : 'BANK_ADMIN');
+    setUserRole(isCentralSuperAdmin ? 'SUPERADMIN' : userView === 'commercial' ? 'BRAND_ADMIN' : 'BANK_ADMIN');
     setUserBrandId('');
     setUserMerchantId('');
     setUserBankBranchId('');
@@ -362,7 +377,7 @@ export default function SuperAdminUsersPage() {
     setUserNombre('');
     setUserEmail('');
     setUserPassword('');
-    setUserRole(userView === 'commercial' ? 'BRAND_ADMIN' : 'BANK_ADMIN');
+    setUserRole(isCentralSuperAdmin ? 'SUPERADMIN' : userView === 'commercial' ? 'BRAND_ADMIN' : 'BANK_ADMIN');
     setUserBrandId('');
     setUserMerchantId('');
     setUserBankBranchId('');
@@ -388,7 +403,7 @@ export default function SuperAdminUsersPage() {
 
   const submitUser = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedBankId && userRole !== 'SUPERADMIN') {
+    if (!isCentralSuperAdmin && !selectedBankId && userRole !== 'SUPERADMIN') {
       setError('Selecciona un banco antes de crear usuarios.');
       return;
     }
@@ -401,21 +416,21 @@ export default function SuperAdminUsersPage() {
           nombre: userNombre.trim(),
           email: userEmail.trim(),
           password: userPassword,
-          role: userRole,
+          role: isCentralSuperAdmin ? 'SUPERADMIN' : userRole,
         };
-        if (userRole !== 'SUPERADMIN') {
+        if (!isCentralSuperAdmin && userRole !== 'SUPERADMIN') {
           payload.tenantId = selectedBankId;
         }
-        if (needsBranch) {
+        if (!isCentralSuperAdmin && needsBranch) {
           payload.bankBranchId = userBankBranchId || undefined;
         }
-        if (isBrandRole && userBrandId.trim()) {
+        if (!isCentralSuperAdmin && isBrandRole && userBrandId.trim()) {
           payload.brandId = userBrandId.trim();
         }
-        if (isLegalEntityRole && userMerchantId.trim()) {
+        if (!isCentralSuperAdmin && isLegalEntityRole && userMerchantId.trim()) {
           payload.merchantId = userMerchantId.trim();
         }
-        if (isPointOfSaleRole) {
+        if (!isCentralSuperAdmin && isPointOfSaleRole) {
           if (userMerchantId.trim()) {
             payload.merchantId = userMerchantId.trim();
           }
@@ -432,37 +447,43 @@ export default function SuperAdminUsersPage() {
         const payload: Record<string, unknown> = {
           nombre: userNombre.trim(),
           email: userEmail.trim(),
-          role: userRole,
+          role: isCentralSuperAdmin ? 'SUPERADMIN' : userRole,
           isActive: userActive,
         };
-        if (needsBranch) {
+        if (!isCentralSuperAdmin && needsBranch) {
           payload.bankBranchId = userBankBranchId || undefined;
-        } else if (!needsBranch) {
+        } else if (!isCentralSuperAdmin && !needsBranch) {
           payload.bankBranchId = '';
         }
-        if (isBrandRole) {
+        if (!isCentralSuperAdmin && isBrandRole) {
           payload.brandId = userBrandId.trim() || undefined;
-        } else {
+        } else if (!isCentralSuperAdmin) {
           payload.brandId = '';
         }
-        if (isLegalEntityRole || isPointOfSaleRole) {
+        if (!isCentralSuperAdmin && (isLegalEntityRole || isPointOfSaleRole)) {
           payload.merchantId = userMerchantId.trim() || undefined;
-        } else {
+        } else if (!isCentralSuperAdmin) {
           payload.merchantId = '';
         }
-        if (isPointOfSaleRole) {
+        if (!isCentralSuperAdmin && isPointOfSaleRole) {
           payload.pointOfSaleId = userPointOfSaleId.trim() || undefined;
-        } else {
+        } else if (!isCentralSuperAdmin) {
           payload.pointOfSaleId = '';
         }
-        await apiJson(`/users/${editingUser.id}?bankId=${selectedBankId}`, {
+        const updatePath =
+          !isCentralSuperAdmin && selectedBankId
+            ? `/users/${editingUser.id}?bankId=${selectedBankId}`
+            : `/users/${editingUser.id}`;
+        await apiJson(updatePath, {
           method: 'PATCH',
           body: JSON.stringify(payload),
         });
         setSuccess('Usuario actualizado correctamente.');
       }
       resetForm();
-      if (selectedBankId) {
+      if (isCentralSuperAdmin) {
+        await loadUsers();
+      } else if (selectedBankId) {
         await loadUsers(selectedBankId);
       }
     } catch (err) {
@@ -478,9 +499,15 @@ export default function SuperAdminUsersPage() {
     setError(null);
     setSuccess(null);
     try {
-      await apiJson(`/users/${user.id}?bankId=${selectedBankId}`, { method: 'DELETE' });
+      const path =
+        !isCentralSuperAdmin && selectedBankId ? `/users/${user.id}?bankId=${selectedBankId}` : `/users/${user.id}`;
+      await apiJson(path, { method: 'DELETE' });
       setSuccess('Usuario desactivado.');
-      await loadUsers(selectedBankId);
+      if (isCentralSuperAdmin) {
+        await loadUsers();
+      } else {
+        await loadUsers(selectedBankId);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo desactivar el usuario');
     }
@@ -488,6 +515,10 @@ export default function SuperAdminUsersPage() {
 
   const handleImport = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isCentralSuperAdmin) {
+      setError('La importacion masiva no esta disponible en la plataforma central.');
+      return;
+    }
     if (!selectedBankId) {
       setError('Selecciona un banco antes de subir el archivo.');
       return;
@@ -578,70 +609,78 @@ export default function SuperAdminUsersPage() {
                   </p>
                 </div>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                        userView === 'bank'
-                          ? 'bg-primary text-white'
-                          : 'bg-surface-container-low text-on-surface-variant'
-                      }`}
-                      onClick={() => setUserView('bank')}
-                    >
-                      Usuarios Bancos
-                    </button>
-                    <button
-                      type="button"
-                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                        userView === 'commercial'
-                          ? 'bg-primary text-white'
-                          : 'bg-surface-container-low text-on-surface-variant'
-                      }`}
-                      onClick={() => setUserView('commercial')}
-                    >
-                      Usuarios Marcas
-                    </button>
-                  </div>
-                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-                    Banco
-                  </label>
-                  <select
-                    className="bg-surface-container-low border-none rounded-xl px-4 py-2 text-sm"
-                    value={selectedBankId}
-                    onChange={(event) => setSelectedBankId(event.target.value)}
-                  >
-                    {bankOptions.map((bank) => (
-                      <option key={bank.value} value={bank.value}>
-                        {bank.label}
-                      </option>
-                    ))}
-                  </select>
-                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-                    Nivel
-                  </label>
-                  <select
-                    className="bg-surface-container-low border-none rounded-xl px-4 py-2 text-sm"
-                    value={userFilter}
-                    onChange={(event) =>
-                      setUserFilter(
-                        event.target.value as 'all' | 'bank' | 'bank-branch' | 'brand' | 'legal-entity' | 'pos',
-                      )
-                    }
-                  >
-                    <option value="all">Todos</option>
-                    {userView === 'bank' ? (
-                      <>
-                        <option value="bank">Banco</option>
-                        <option value="bank-branch">Sucursal bancaria</option>
-                      </>
-                    ) : (
-                      <>
-                        <option value="brand">Marca</option>
-                        <option value="legal-entity">Razon social</option>
-                        <option value="pos">PDV</option>
-                      </>
-                    )}
-                  </select>
+                  {!isCentralSuperAdmin ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                            userView === 'bank'
+                              ? 'bg-primary text-white'
+                              : 'bg-surface-container-low text-on-surface-variant'
+                          }`}
+                          onClick={() => setUserView('bank')}
+                        >
+                          Usuarios Bancos
+                        </button>
+                        <button
+                          type="button"
+                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                            userView === 'commercial'
+                              ? 'bg-primary text-white'
+                              : 'bg-surface-container-low text-on-surface-variant'
+                          }`}
+                          onClick={() => setUserView('commercial')}
+                        >
+                          Usuarios Marcas
+                        </button>
+                      </div>
+                      <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                        Banco
+                      </label>
+                      <select
+                        className="bg-surface-container-low border-none rounded-xl px-4 py-2 text-sm"
+                        value={selectedBankId}
+                        onChange={(event) => setSelectedBankId(event.target.value)}
+                      >
+                        {bankOptions.map((bank) => (
+                          <option key={bank.value} value={bank.value}>
+                            {bank.label}
+                          </option>
+                        ))}
+                      </select>
+                      <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                        Nivel
+                      </label>
+                      <select
+                        className="bg-surface-container-low border-none rounded-xl px-4 py-2 text-sm"
+                        value={userFilter}
+                        onChange={(event) =>
+                          setUserFilter(
+                            event.target.value as 'all' | 'bank' | 'bank-branch' | 'brand' | 'legal-entity' | 'pos',
+                          )
+                        }
+                      >
+                        <option value="all">Todos</option>
+                        {userView === 'bank' ? (
+                          <>
+                            <option value="bank">Banco</option>
+                            <option value="bank-branch">Sucursal bancaria</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="brand">Marca</option>
+                            <option value="legal-entity">Razon social</option>
+                            <option value="pos">PDV</option>
+                          </>
+                        )}
+                      </select>
+                    </>
+                  ) : (
+                    <div className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                      Solo usuarios SuperAdmin de plataforma central
+                    </div>
+                  )}
                   <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
                     Registros por pagina
                   </label>
@@ -718,7 +757,7 @@ export default function SuperAdminUsersPage() {
                           value={userRole}
                           onChange={(event) => setUserRole(event.target.value)}
                         >
-                          {roleOptions.map((roleOption) => (
+                          {(isCentralSuperAdmin ? ['SUPERADMIN'] : roleOptions).map((roleOption) => (
                             <option key={roleOption} value={roleOption}>
                               {roleLabels[roleOption] ?? roleOption}
                             </option>
@@ -743,7 +782,7 @@ export default function SuperAdminUsersPage() {
                         </div>
                       )}
                     </div>
-                    {needsBranch ? (
+                    {!isCentralSuperAdmin && needsBranch ? (
                       <div>
                         <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
                           Sucursal bancaria
@@ -765,7 +804,7 @@ export default function SuperAdminUsersPage() {
                         </select>
                       </div>
                     ) : null}
-                    {isBrandRole ? (
+                    {!isCentralSuperAdmin && isBrandRole ? (
                       <div>
                         <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Marca</label>
                         <select
@@ -783,7 +822,7 @@ export default function SuperAdminUsersPage() {
                         </select>
                       </div>
                     ) : null}
-                    {isLegalEntityRole || isPointOfSaleRole ? (
+                    {!isCentralSuperAdmin && (isLegalEntityRole || isPointOfSaleRole) ? (
                       <div>
                         <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
                           Razon social
@@ -803,7 +842,7 @@ export default function SuperAdminUsersPage() {
                         </select>
                       </div>
                     ) : null}
-                    {isPointOfSaleRole ? (
+                    {!isCentralSuperAdmin && isPointOfSaleRole ? (
                       <div>
                         <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
                           Punto de venta
@@ -848,27 +887,57 @@ export default function SuperAdminUsersPage() {
                   </div>
                 )}
 
-                <form onSubmit={handleImport} className="bg-surface-container-low rounded-2xl p-6 space-y-3">
-                  <h3 className="text-base font-semibold text-on-surface">Subida masiva (CSV)</h3>
-                  <p className="text-xs text-on-surface-variant">
-                    Columnas requeridas: nombre, email, password, role. Opcionales: bankBranchId, brandId,
-                    merchantId, pointOfSaleId.
-                  </p>
-                  <input className="w-full text-sm" type="file" accept=".csv" />
-                  <button
-                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-300"
-                    type="submit"
-                    disabled={uploading}
-                  >
-                    {uploading ? 'Subiendo...' : 'Importar usuarios'}
-                  </button>
-                </form>
+                {!isCentralSuperAdmin ? (
+                  <form onSubmit={handleImport} className="bg-surface-container-low rounded-2xl p-6 space-y-3">
+                    <h3 className="text-base font-semibold text-on-surface">Subida masiva (CSV)</h3>
+                    <p className="text-xs text-on-surface-variant">
+                      Columnas requeridas: nombre, email, password, role. Opcionales: bankBranchId, brandId,
+                      merchantId, pointOfSaleId.
+                    </p>
+                    <input className="w-full text-sm" type="file" accept=".csv" />
+                    <button
+                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-300"
+                      type="submit"
+                      disabled={uploading}
+                    >
+                      {uploading ? 'Subiendo...' : 'Importar usuarios'}
+                    </button>
+                  </form>
+                ) : (
+                  <div className="bg-surface-container-low rounded-2xl p-6 space-y-3">
+                    <h3 className="text-base font-semibold text-on-surface">Politica central</h3>
+                    <p className="text-xs text-on-surface-variant">
+                      En la plataforma central solo se administran usuarios SuperAdmin de la propia plataforma.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    {userView === 'bank' ? (
+                    {isCentralSuperAdmin ? (
+                      <tr className="bg-surface-container-low/50">
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Nombre
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Email
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Rol
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-center">
+                          Estado
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
+                          Ultimo acceso
+                        </th>
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-right">
+                          Acciones
+                        </th>
+                      </tr>
+                    ) : userView === 'bank' ? (
                       <tr className="bg-surface-container-low/50">
                         <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
                           Nombre
@@ -930,14 +999,20 @@ export default function SuperAdminUsersPage() {
                   <tbody className="divide-y divide-slate-50">
                     {loading ? (
                       <tr>
-                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={userView === 'bank' ? 8 : 9}>
+                        <td
+                          className="px-6 py-6 text-sm text-on-surface-variant"
+                          colSpan={isCentralSuperAdmin ? 6 : userView === 'bank' ? 8 : 9}
+                        >
                           Cargando usuarios...
                         </td>
                       </tr>
                     ) : null}
                     {!loading && filteredUsers.length === 0 ? (
                       <tr>
-                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={userView === 'bank' ? 8 : 9}>
+                        <td
+                          className="px-6 py-6 text-sm text-on-surface-variant"
+                          colSpan={isCentralSuperAdmin ? 6 : userView === 'bank' ? 8 : 9}
+                        >
                           No hay usuarios para este filtro.
                         </td>
                       </tr>
@@ -951,7 +1026,13 @@ export default function SuperAdminUsersPage() {
                             <div className="text-xs text-on-surface-variant">{user.id.slice(0, 8)}</div>
                           </td>
                           <td className="px-6 py-4 text-sm text-on-surface-variant">{user.email}</td>
-                          {userView === 'bank' ? (
+                          {isCentralSuperAdmin ? (
+                            <>
+                              <td className="px-6 py-4 text-sm text-on-surface-variant">
+                                {roleLabels[user.role] ?? user.role}
+                              </td>
+                            </>
+                          ) : userView === 'bank' ? (
                             <>
                               <td className="px-6 py-4 text-sm text-on-surface-variant">
                                 {user.bank?.nombre ?? '-'}
@@ -995,7 +1076,11 @@ export default function SuperAdminUsersPage() {
                             <div className="flex items-center justify-end gap-3">
                               <a
                                 className="text-xs font-bold text-primary hover:underline"
-                                href={`/superadmin/users/${user.id}?bankId=${selectedBankId}`}
+                                href={
+                                  !isCentralSuperAdmin && selectedBankId
+                                    ? `/superadmin/users/${user.id}?bankId=${selectedBankId}`
+                                    : `/superadmin/users/${user.id}`
+                                }
                               >
                                 Ver
                               </a>

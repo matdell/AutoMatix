@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -20,10 +21,12 @@ import { CurrentUser } from '../common/current-user.decorator';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ensureCsvFile, FILE_INTERCEPTOR_OPTIONS } from '../common/upload-security';
+import { isCentralPlatformMode } from '../common/platform-mode';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(
+  Role.SUPERADMIN,
   Role.BANK_ADMIN,
   Role.BANK_BRANCH_MANAGER,
   Role.BRAND_ADMIN,
@@ -33,6 +36,13 @@ import { ensureCsvFile, FILE_INTERCEPTOR_OPTIONS } from '../common/upload-securi
 )
 export class UsersController {
   constructor(private usersService: UsersService) {}
+
+  private resolveTenantId(user: { tenantId: string; role: Role }, bankId?: string) {
+    if (isCentralPlatformMode() && user.role === Role.SUPERADMIN) {
+      return user.tenantId;
+    }
+    return user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
+  }
 
   @Get()
   async list(
@@ -46,7 +56,7 @@ export class UsersController {
     },
     @Query('bankId') bankId?: string,
   ) {
-    const resolvedTenantId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
+    const resolvedTenantId = this.resolveTenantId(user, bankId);
     return this.usersService.list(resolvedTenantId, {
       role: user.role,
       bankBranchId: user.bankBranchId,
@@ -69,7 +79,7 @@ export class UsersController {
     },
     @Query('bankId') bankId?: string,
   ) {
-    const resolvedTenantId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
+    const resolvedTenantId = this.resolveTenantId(user, bankId);
     return this.usersService.get(resolvedTenantId, id, {
       role: user.role,
       bankBranchId: user.bankBranchId,
@@ -94,7 +104,7 @@ export class UsersController {
     },
     @Query('bankId') bankId?: string,
   ) {
-    const resolvedTenantId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
+    const resolvedTenantId = this.resolveTenantId(user, bankId);
     return this.usersService.update(
       resolvedTenantId,
       id,
@@ -125,7 +135,7 @@ export class UsersController {
     },
     @Query('bankId') bankId?: string,
   ) {
-    const resolvedTenantId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
+    const resolvedTenantId = this.resolveTenantId(user, bankId);
     return this.usersService.deactivate(
       resolvedTenantId,
       id,
@@ -148,7 +158,10 @@ export class UsersController {
     @Query('bankId') bankId?: string,
   ) {
     ensureCsvFile(file);
-    const resolvedTenantId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
+    if (isCentralPlatformMode() && user.role === Role.SUPERADMIN) {
+      throw new ForbiddenException('Importacion masiva no disponible en plataforma central');
+    }
+    const resolvedTenantId = this.resolveTenantId(user, bankId);
     return this.usersService.importCsv(resolvedTenantId, file.buffer, user.userId);
   }
 }

@@ -15,6 +15,7 @@ import { randomBytes, randomInt } from 'crypto';
 import { authenticator } from 'otplib';
 import { ConfigService } from '@nestjs/config';
 import { AuditService } from '../audit/audit.service';
+import { isCentralPlatformMode } from '../common/platform-mode';
 
 authenticator.options = { window: 1 };
 
@@ -270,6 +271,22 @@ export class AuthService {
   ) {
     const actorRole = actor.role;
     const tenantId = actor.tenantId;
+    const centralMode = isCentralPlatformMode();
+
+    if (centralMode && actorRole === Role.SUPERADMIN) {
+      if (dto.role !== Role.SUPERADMIN) {
+        throw new ForbiddenException('En plataforma central solo se pueden crear usuarios SuperAdmin');
+      }
+      if (dto.tenantId && dto.tenantId !== tenantId) {
+        throw new ForbiddenException('No autorizado para definir otro banco desde plataforma central');
+      }
+      dto.tenantId = tenantId;
+      dto.bankBranchId = undefined;
+      dto.brandId = undefined;
+      dto.merchantId = undefined;
+      dto.pointOfSaleId = undefined;
+    }
+
     if (actorRole === Role.BANK_BRANCH_MANAGER) {
       const allowed = new Set<Role>([Role.BANK_BRANCH_MANAGER, Role.BANK_BRANCH_OPERATOR]);
       if (!allowed.has(dto.role)) {

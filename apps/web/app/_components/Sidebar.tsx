@@ -4,19 +4,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import AutoMatixLogo from './AutoMatixLogo';
 import { apiJson, clearToken } from '@/lib/api';
+import { isCurrentCentralHost } from '@/lib/platform';
 
 type NavItem = {
   href: string;
   label: string;
   icon: string;
 };
-
-const centralHostnames = (process.env.NEXT_PUBLIC_CENTRAL_HOSTS ?? '')
-  .split(',')
-  .map((host) => host.trim().toLowerCase())
-  .filter(Boolean);
-
-const defaultCentralHostnames = ['devbank.automatixpay.com', 'devbankstaging.automatixpay.com'];
 
 const baseItems: NavItem[] = [
   { href: '/dashboard', label: 'Tablero', icon: 'dashboard' },
@@ -71,10 +65,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const host = window.location.hostname.toLowerCase();
-    const allowedHosts = centralHostnames.length > 0 ? centralHostnames : defaultCentralHostnames;
-    setIsCentralHost(allowedHosts.includes(host));
+    setIsCentralHost(isCurrentCentralHost());
   }, []);
 
   useEffect(() => {
