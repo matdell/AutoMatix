@@ -65,6 +65,7 @@ Variables recomendadas para provisioning:
 - `PROVISIONING_DB_CONTAINER`, `PROVISIONING_DB_USER`, `PROVISIONING_DB_PASSWORD`, `PROVISIONING_DB_HOST`, `PROVISIONING_DB_PORT`, `PROVISIONING_DB_PREFIX`.
 - `PROVISIONING_PORT_WEB_START`, `PROVISIONING_PORT_WEB_END` para asignacion automatica de puertos.
 - `PROVISIONING_TLS_EMAIL` para Certbot.
+- `PROVISIONING_LOCAL_HOSTS` (opcional): lista CSV de hosts considerados locales (ej: `127.0.0.1,localhost,74.208.218.120`) para ejecutar provisioning sin SSH.
 
 ## Certificados
 - Certificados publicos: Let's Encrypt por dominio.
@@ -126,6 +127,7 @@ Endpoints para registrar y seguir solicitudes de provisionamiento por banco:
 - El frontend debe consumir API relativa (`NEXT_PUBLIC_API_URL=/api`) para no cruzar dominios entre entornos.
 - El login ya no requiere `bankSlug`: la API resuelve banco por `LOGIN_DEFAULT_BANK_SLUG` y/o subdominio.
 - Para `VPS_MANAGED`, al crear la solicitud se ejecuta automaticamente: DB + instancia + PM2 + Nginx + Certbot.
+- Si `config.host` coincide con `PROVISIONING_LOCAL_HOSTS`, no requiere `sshUser` ni `sshPrivateKey`.
 - Para el banco, configurar en `apps/api/.env`:
   - CENTRAL_SYNC_BASE_URL=https://dev.automatixpay.com
   - SYNC_BANK_ID=bank1

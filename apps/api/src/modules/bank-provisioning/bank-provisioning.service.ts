@@ -107,17 +107,15 @@ export class BankProvisioningService {
     }
 
     const config = dto.config ?? {};
-    const credentials = dto.credentials ?? {};
 
     if (dto.target === ProvisioningTarget.VPS_MANAGED) {
-      if (!this.pickString(config, 'host') || !this.pickString(credentials, 'sshUser')) {
-        throw new BadRequestException(
-          'Para VPS_MANAGED se requiere config.host y credentials.sshUser',
-        );
+      if (!this.pickString(config, 'host')) {
+        throw new BadRequestException('Para VPS_MANAGED se requiere config.host');
       }
     }
 
     if (dto.target === ProvisioningTarget.CUSTOMER_CLOUD) {
+      const credentials = dto.credentials ?? {};
       if (!dto.provider?.trim()) {
         throw new BadRequestException('Para CUSTOMER_CLOUD se requiere provider');
       }
@@ -135,6 +133,23 @@ export class BankProvisioningService {
         throw new BadRequestException('Para ON_PREM se requiere config.endpoint');
       }
     }
+  }
+
+  private isLocalProvisionHost(host: string) {
+    const normalized = host.trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+
+    const defaults = new Set(['127.0.0.1', 'localhost', '::1']);
+    const configured = (this.config.get<string>('PROVISIONING_LOCAL_HOSTS') || '')
+      .split(',')
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(Boolean);
+    for (const entry of configured) {
+      defaults.add(entry);
+    }
+    return defaults.has(normalized);
   }
 
   private encryptCredentials(credentials?: JsonMap): Prisma.InputJsonValue | undefined {
@@ -281,11 +296,26 @@ export class BankProvisioningService {
 
   private async runRemoteScript(params: {
     host: string;
-    sshUser: string;
+    sshUser?: string;
     sshPort: number;
     sshPrivateKey?: string;
     script: string;
   }) {
+    if (this.isLocalProvisionHost(params.host)) {
+      const localResult = await this.runCommand('bash', ['-s'], {
+        input: params.script,
+        timeoutMs: 1000 * 60 * 25,
+      });
+      if (localResult.code !== 0) {
+        throw new Error(`Local provisioning failed (${localResult.code}): ${localResult.stderr || localResult.stdout}`);
+      }
+      return localResult.stdout;
+    }
+
+    if (!params.sshUser?.trim()) {
+      throw new Error('Falta sshUser para host remoto');
+    }
+
     let tempDir: string | null = null;
     let keyPath: string | null = null;
 
@@ -311,7 +341,7 @@ export class BankProvisioningService {
       if (keyPath) {
         args.push('-i', keyPath);
       }
-      args.push(`${params.sshUser}@${params.host}`, 'bash -s');
+      args.push(`${params.sshUser.trim()}@${params.host}`, 'bash -s');
 
       const result = await this.runCommand('ssh', args, {
         input: params.script,
@@ -459,7 +489,8 @@ upsert_env() {
 
 API_ENV="$TARGET_DIR/apps/api/.env"
 cp "$TEMPLATE_DIR/apps/api/.env" "$API_ENV"
-upsert_env "$API_ENV" "DATABASE_URL" "postgresql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME?schema=public"
+DB_URL="postgresql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME?schema=public"
+upsert_env "$API_ENV" "DATABASE_URL" "$DB_URL"
 upsert_env "$API_ENV" "APP_URL" "https://$DOMAIN"
 upsert_env "$API_ENV" "PORT" "$API_PORT"
 upsert_env "$API_ENV" "LOGIN_DEFAULT_BANK_SLUG" "$BANK_SLUG"
@@ -470,10 +501,11 @@ NEXT_PUBLIC_API_URL=/api
 EOF
 
 cd "$TARGET_DIR/apps/api"
+export DATABASE_URL="$DB_URL"
 npx prisma migrate deploy
 
 cd "$TARGET_DIR"
-export DATABASE_URL="postgresql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME?schema=public"
+export DATABASE_URL="$DB_URL"
 export BANK_PROVISION_PAYLOAD="$PAYLOAD_B64"
 
 node - <<'NODE'
@@ -564,7 +596,8 @@ NODE
 npm run build --workspace apps/api
 npm run build --workspace apps/web
 
-cat > "$TARGET_DIR/ecosystem.provisioned.cjs" <<EOF
+ECOSYSTEM_FILE="$TARGET_DIR/ecosystem.provisioned.config.js"
+cat > "$ECOSYSTEM_FILE" <<EOF
 module.exports = {
   apps: [
     {
@@ -594,9 +627,11 @@ module.exports = {
 };
 EOF
 
+pm2 delete "ecosystem.provisioned" >/dev/null 2>&1 || true
+pm2 delete "ecosystem.provisioned.config" >/dev/null 2>&1 || true
 pm2 delete "$APP_API" >/dev/null 2>&1 || true
 pm2 delete "$APP_WEB" >/dev/null 2>&1 || true
-pm2 start "$TARGET_DIR/ecosystem.provisioned.cjs"
+pm2 start "$ECOSYSTEM_FILE"
 pm2 save
 
 NGINX_FILE="/etc/nginx/sites-available/$DOMAIN.conf"
@@ -608,21 +643,21 @@ server {
   location /api/ {
     proxy_pass http://127.0.0.1:$API_PORT;
     proxy_http_version 1.1;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header Host \\$host;
+    proxy_set_header X-Real-IP \\$remote_addr;
+    proxy_set_header X-Forwarded-For \\$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \\$scheme;
   }
 
   location / {
     proxy_pass http://127.0.0.1:$WEB_PORT;
     proxy_http_version 1.1;
-    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Upgrade \\$http_upgrade;
     proxy_set_header Connection "upgrade";
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header Host \\$host;
+    proxy_set_header X-Real-IP \\$remote_addr;
+    proxy_set_header X-Forwarded-For \\$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \\$scheme;
   }
 }
 EOF
@@ -636,10 +671,10 @@ server {
   location / {
     proxy_pass http://127.0.0.1:$API_PORT;
     proxy_http_version 1.1;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header Host \\$host;
+    proxy_set_header X-Real-IP \\$remote_addr;
+    proxy_set_header X-Forwarded-For \\$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \\$scheme;
   }
 }
 EOF
@@ -737,8 +772,11 @@ echo "__PROVISION_RESULT__ instanceDir=$TARGET_DIR apiPort=$API_PORT webPort=$WE
       const sshUser = this.pickString(creds, 'sshUser');
       const sshPort = this.pickNumber(requestConfig, 'sshPort', 22);
       const sshPrivateKey = this.pickString(creds, 'sshPrivateKey');
-      if (!host || !sshUser) {
-        throw new Error('Faltan credenciales SSH para ejecutar provisioning en VPS');
+      if (!host) {
+        throw new Error('Falta config.host para ejecutar provisioning en VPS');
+      }
+      if (!this.isLocalProvisionHost(host) && !sshUser) {
+        throw new Error('Falta credentials.sshUser para host remoto');
       }
 
       const domain = request.domain?.trim();

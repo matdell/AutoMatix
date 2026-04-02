@@ -577,7 +577,9 @@ export default function SuperAdminBanksPage() {
     if (provisioningTarget === 'VPS_MANAGED') {
       config.host = vpsHost.trim();
       config.sshPort = Number(vpsSshPort || '22');
-      credentials.sshUser = vpsSshUser.trim();
+      if (vpsSshUser.trim()) {
+        credentials.sshUser = vpsSshUser.trim();
+      }
       if (vpsSshPrivateKey.trim()) {
         credentials.sshPrivateKey = vpsSshPrivateKey.trim();
       }
@@ -1646,14 +1648,13 @@ export default function SuperAdminBanksPage() {
               </div>
               <div>
                 <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-                  SSH User
+                  SSH User (opcional si host es local)
                 </label>
                 <input
                   className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
                   value={vpsSshUser}
                   onChange={(event) => setVpsSshUser(event.target.value)}
                   placeholder="matias"
-                  required
                 />
               </div>
               <div>
