@@ -16,7 +16,6 @@ import { AuditModule } from './audit/audit.module';
 import { StorageModule } from './storage/storage.module';
 import { PlacesModule } from './places/places.module';
 import { DocusignModule } from './docusign/docusign.module';
-import { SyncModule } from './sync/sync.module';
 import { BankProvisioningModule } from './bank-provisioning/bank-provisioning.module';
 
 @Module({
@@ -38,7 +37,6 @@ import { BankProvisioningModule } from './bank-provisioning/bank-provisioning.mo
     StorageModule,
     PlacesModule,
     DocusignModule,
-    SyncModule,
     BankProvisioningModule,
   ],
 })

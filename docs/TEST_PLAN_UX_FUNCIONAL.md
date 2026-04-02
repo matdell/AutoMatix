@@ -93,18 +93,15 @@ Validar para cada rol:
 - acceso permitido/denegado en URL directa
 - acciones de escritura dentro/fuera de scope
 
-## Fase 4: Operacion y sync (manual)
-1. Confirmar cron activo en VPS para:
-   - `/home/matias/dev-bank`
-   - `/home/matias/dev-bank-devbank`
-   - `/home/matias/dev-bank-devbank-staging`
-2. Verificar logs:
-```bash
-tail -n 20 /home/matias/dev-bank/logs/sync-pull.log
-tail -n 20 /home/matias/dev-bank-devbank/logs/sync-pull.log
-tail -n 20 /home/matias/dev-bank-devbank-staging/logs/sync-pull.log
-```
-3. Esperado: `sync brands/legal_entities/points_of_sale ok` sin errores repetidos.
+## Fase 4: Portabilidad de datos comerciales (manual)
+1. Login como `BRAND_ADMIN`.
+2. Ejecutar `Descargar mis datos` sin incluir datos especificos del banco.
+3. Importar el CSV en otra instancia bancaria y validar:
+   - marca creada/actualizada
+   - razones sociales vinculadas
+   - PDV creados/actualizados
+4. Repetir export/import con `includeBankSpecificData=true` y validar campos operativos.
+5. Verificar que un `LEGAL_ENTITY_ADMIN` solo exporta/importa su propia razon social y PDV.
 
 ## Ejecucion inicial (realizada)
 Fecha: `2026-03-31` (America/New_York)
@@ -115,11 +112,10 @@ Estado:
 
 ## Ronda solicitada por producto (2026-03-31)
 Scope pedido:
-- Plataforma central: crear comercio, crear banco, crear usuarios de banco.
+- Plataforma central: crear banco, crear usuarios de banco.
 - Banco: crear usuarios, crear sucursales, editar usuarios, editar sucursales.
 
 Resultado funcional (API):
-- Crear comercio: OK
 - Crear banco: OK
 - Crear usuarios de banco: OK
 - Banco crear usuarios: OK

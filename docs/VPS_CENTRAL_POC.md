@@ -1,8 +1,13 @@
 # VPS PoC Central + Bank (automatixpay.com)
 
 ## Objetivo
-Prueba funcional en un unico VPS para validar sync central <-> banco con mTLS y dominios separados.
+Prueba funcional en un unico VPS para validar provisionamiento de bancos e instancias separadas por dominio.
 No representa aislamiento real para produccion.
+
+## Estado actual (2026-04-02)
+- El sync central <-> banco quedo deshabilitado por politica de seguridad del producto.
+- La central se usa solo para alta/provisionamiento de bancos.
+- Marcas/RS/PDV viven en cada banco y su portabilidad se resuelve por CSV export/import.
 
 ## Dominios
 - Central: https://dev.automatixpay.com
@@ -55,7 +60,6 @@ Checklist operativo actual (manual):
 9. Verificación:
    - Login del admin del banco.
    - Healthcheck de API.
-   - Sync cron (`scripts/sync-pull-cron.sh`) si aplica.
 
 Variables recomendadas para provisioning:
 - `PROVISIONING_CREDENTIALS_KEY` (recomendado): clave para cifrar credenciales de provisioning en DB.
@@ -69,7 +73,7 @@ Variables recomendadas para provisioning:
 
 ## Certificados
 - Certificados publicos: Let's Encrypt por dominio.
-- mTLS: CA interna para validar clientes en /sync/*.
+- mTLS para sync: legacy (no requerido en la arquitectura vigente).
 
 Ubicacion sugerida en VPS
 - /etc/nginx/ssl/automatixpay/
@@ -90,20 +94,16 @@ Copias locales (este repo, ignorado por git)
 - secrets/mtls/automatixpay/devbank-staging-client.key
 
 ## Nginx
-- Central exige mTLS solo en /sync/.
+- En arquitectura vigente no se expone flujo operativo de sync.
 - / y /health quedan publicos.
 
-## Sync (central)
-Endpoints expuestos por el PoC:
-- GET /sync/batch?bankId=...&entity=...&cursor=...
-- POST /sync/ack
+## Sync (legacy deshabilitado)
+Los endpoints de sync se mantienen solo para compatibilidad tecnica y responden `410`.
+No usar para operacion.
 
-## Sync (banco)
-Endpoints en Bank API (requiere JWT de SUPERADMIN o BANK_ADMIN):
-- POST /api/sync/pull
-  - body: { entity, cursor?, bankId? }
-- POST /api/sync/ack
-  - body: { entity, batchId, cursor?, status?, error?, bankId? }
+En banco:
+- `SyncModule` removido del runtime principal.
+- No hay dependencia operativa de central para datos comerciales.
 
 ## Provisioning API (SuperAdmin)
 Endpoints para registrar y seguir solicitudes de provisionamiento por banco:
@@ -122,55 +122,11 @@ Endpoints para registrar y seguir solicitudes de provisionamiento por banco:
   - relanza provisioning automatico (solo `VPS_MANAGED`).
 
 ## Notas
-- El secreto HMAC del sync se define en runtime via env `SYNC_HMAC_SECRET`.
-- Las instancias bancarias no consultan central en linea fuera del sync.
 - El frontend debe consumir API relativa (`NEXT_PUBLIC_API_URL=/api`) para no cruzar dominios entre entornos.
 - El login ya no requiere `bankSlug`: la API resuelve banco por `LOGIN_DEFAULT_BANK_SLUG` y/o subdominio.
 - Para `VPS_MANAGED`, al crear la solicitud se ejecuta automaticamente: DB + instancia + PM2 + Nginx + Certbot.
 - Si `config.host` coincide con `PROVISIONING_LOCAL_HOSTS`, no requiere `sshUser` ni `sshPrivateKey`.
-- Para el banco, configurar en `apps/api/.env`:
-  - CENTRAL_SYNC_BASE_URL=https://dev.automatixpay.com
-  - SYNC_BANK_ID=bank1
-  - SYNC_CLIENT_CERT_PATH=/home/matias/certs/automatixpay/bank1-client.crt
-  - SYNC_CLIENT_KEY_PATH=/home/matias/certs/automatixpay/bank1-client.key
-  - SYNC_HMAC_SECRET=... (mismo valor que central)
-
-## Script de prueba
-`scripts/sync-test.sh`
-
-Ejemplos:
-```bash
-./scripts/sync-test.sh
-MODE=central CENTRAL_BASE_URL=https://staging.automatixpay.com CERT=secrets/mtls/automatixpay/bankstaging-client.crt KEY=secrets/mtls/automatixpay/bankstaging-client.key ./scripts/sync-test.sh
-MODE=central CENTRAL_BASE_URL=https://dev.automatixpay.com CERT=secrets/mtls/automatixpay/devbank-client.crt KEY=secrets/mtls/automatixpay/devbank-client.key BANK_ID=devbank ./scripts/sync-test.sh
-MODE=central CENTRAL_BASE_URL=https://staging.automatixpay.com CERT=secrets/mtls/automatixpay/devbank-staging-client.crt KEY=secrets/mtls/automatixpay/devbank-staging-client.key BANK_ID=devbank-staging ./scripts/sync-test.sh
-MODE=bank TOKEN=... BANK_API_BASE=https://bank1.automatixpay.com/api ./scripts/sync-test.sh
-```
-
-## Cron de sync pull
-Script:
-- `scripts/sync-pull-cron.sh`
-- `scripts/sync-pull-cron.env.example`
-
-Instalacion sugerida en cada banco:
-```bash
-cp scripts/sync-pull-cron.sh /home/matias/dev-bank/scripts/sync-pull-cron.sh
-cp scripts/sync-pull-cron.sh /home/matias/dev-bank-devbank/scripts/sync-pull-cron.sh
-cp scripts/sync-pull-cron.sh /home/matias/dev-bank-devbank-staging/scripts/sync-pull-cron.sh
-chmod +x /home/matias/dev-bank/scripts/sync-pull-cron.sh
-chmod +x /home/matias/dev-bank-devbank/scripts/sync-pull-cron.sh
-chmod +x /home/matias/dev-bank-devbank-staging/scripts/sync-pull-cron.sh
-cp scripts/sync-pull-cron.env.example /home/matias/dev-bank/.sync-cron.env
-cp scripts/sync-pull-cron.env.example /home/matias/dev-bank-devbank/.sync-cron.env
-cp scripts/sync-pull-cron.env.example /home/matias/dev-bank-devbank-staging/.sync-cron.env
-```
-
-Crontab (cada 5 minutos):
-```bash
-*/5 * * * * ENV_FILE=/home/matias/dev-bank/.sync-cron.env /home/matias/dev-bank/scripts/sync-pull-cron.sh >> /home/matias/dev-bank/logs/sync-pull.log 2>&1
-*/5 * * * * ENV_FILE=/home/matias/dev-bank-devbank/.sync-cron.env /home/matias/dev-bank-devbank/scripts/sync-pull-cron.sh >> /home/matias/dev-bank-devbank/logs/sync-pull.log 2>&1
-*/5 * * * * ENV_FILE=/home/matias/dev-bank-devbank-staging/.sync-cron.env /home/matias/dev-bank-devbank-staging/scripts/sync-pull-cron.sh >> /home/matias/dev-bank-devbank-staging/logs/sync-pull.log 2>&1
-```
+- Export/import de datos comerciales entre bancos se hace por CSV con alcance por rol.
 
 ## Nota PM2 + Prisma en VPS
 - En este VPS `dev-bank-devbank` y `dev-bank-devbank-staging` comparten `node_modules` via symlink a `/home/matias/dev-bank/node_modules`.

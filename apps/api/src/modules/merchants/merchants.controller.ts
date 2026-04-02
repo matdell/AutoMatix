@@ -27,6 +27,13 @@ import { FileInterceptor } from '@nestjs/platform-express';
 export class MerchantsController {
   constructor(private merchantsService: MerchantsService) {}
 
+  private parseBoolean(value?: string) {
+    if (!value) {
+      return false;
+    }
+    return ['1', 'true', 'yes', 'si', 'on'].includes(value.trim().toLowerCase());
+  }
+
   @Get()
   @Roles(
     Role.SUPERADMIN,
@@ -77,6 +84,45 @@ export class MerchantsController {
   @Roles(Role.BANK_ADMIN, Role.BANK_OPS)
   async exportCsv(@CurrentUser() user: { tenantId: string }) {
     return this.merchantsService.exportCsv(user.tenantId);
+  }
+
+  @Get('my-data/export')
+  @Roles(
+    Role.SUPERADMIN,
+    Role.BANK_ADMIN,
+    Role.BANK_OPS,
+    Role.BRAND_ADMIN,
+    Role.LEGAL_ENTITY_ADMIN,
+    Role.MERCHANT_ADMIN,
+  )
+  async exportMyData(
+    @CurrentUser() user: { tenantId: string; role: Role; brandId?: string | null; merchantId?: string | null },
+    @Query('includeBankSpecificData') includeBankSpecificData?: string,
+    @Query('bankId') bankId?: string,
+  ) {
+    const resolvedTenantId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
+    const scopedBrandId = user.role === Role.BRAND_ADMIN ? user.brandId ?? undefined : undefined;
+    const scopedMerchantId =
+      user.role === Role.LEGAL_ENTITY_ADMIN || user.role === Role.MERCHANT_ADMIN
+        ? user.merchantId ?? undefined
+        : undefined;
+
+    if (user.role === Role.BRAND_ADMIN && !scopedBrandId) {
+      throw new ForbiddenException('El usuario no tiene marca asignada');
+    }
+    if (
+      (user.role === Role.LEGAL_ENTITY_ADMIN || user.role === Role.MERCHANT_ADMIN) &&
+      !scopedMerchantId
+    ) {
+      throw new ForbiddenException('El usuario no tiene razon social asignada');
+    }
+
+    return this.merchantsService.exportPortableCsv({
+      tenantId: resolvedTenantId,
+      includeBankSpecificData: this.parseBoolean(includeBankSpecificData),
+      brandId: scopedBrandId,
+      merchantId: scopedMerchantId,
+    });
   }
 
   @Get(':id')
@@ -180,5 +226,54 @@ export class MerchantsController {
   ) {
     const resolvedTenantId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
     return this.merchantsService.importCsv(resolvedTenantId, file.buffer, user.userId);
+  }
+
+  @Post('my-data/import')
+  @Roles(
+    Role.SUPERADMIN,
+    Role.BANK_ADMIN,
+    Role.BANK_OPS,
+    Role.BRAND_ADMIN,
+    Role.LEGAL_ENTITY_ADMIN,
+    Role.MERCHANT_ADMIN,
+  )
+  @UseInterceptors(FileInterceptor('file'))
+  async importMyData(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: {
+      tenantId: string;
+      userId: string;
+      role: Role;
+      brandId?: string | null;
+      merchantId?: string | null;
+    },
+    @Query('includeBankSpecificData') includeBankSpecificData?: string,
+    @Query('bankId') bankId?: string,
+  ) {
+    const resolvedTenantId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
+    const scopedBrandId = user.role === Role.BRAND_ADMIN ? user.brandId ?? undefined : undefined;
+    const scopedMerchantId =
+      user.role === Role.LEGAL_ENTITY_ADMIN || user.role === Role.MERCHANT_ADMIN
+        ? user.merchantId ?? undefined
+        : undefined;
+
+    if (user.role === Role.BRAND_ADMIN && !scopedBrandId) {
+      throw new ForbiddenException('El usuario no tiene marca asignada');
+    }
+    if (
+      (user.role === Role.LEGAL_ENTITY_ADMIN || user.role === Role.MERCHANT_ADMIN) &&
+      !scopedMerchantId
+    ) {
+      throw new ForbiddenException('El usuario no tiene razon social asignada');
+    }
+
+    return this.merchantsService.importPortableCsv({
+      tenantId: resolvedTenantId,
+      csv: file.buffer,
+      includeBankSpecificData: this.parseBoolean(includeBankSpecificData),
+      actorId: user.userId,
+      brandId: scopedBrandId,
+      merchantId: scopedMerchantId,
+    });
   }
 }
