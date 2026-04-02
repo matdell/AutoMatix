@@ -63,13 +63,15 @@ Checklist operativo actual (manual):
 
 Variables recomendadas para provisioning:
 - `PROVISIONING_CREDENTIALS_KEY` (recomendado): clave para cifrar credenciales de provisioning en DB.
-  - Si no se define, el sistema usa `JWT_SECRET` como fallback.
+  - En `production` es obligatoria y debe tener al menos 32 caracteres.
+- `PROVISIONING_SSH_KNOWN_HOSTS_PATH` (recomendado): ruta local del `known_hosts` usado por SSH.
 - `PROVISIONING_TEMPLATE_DIR` (opcional): template de instancia a clonar. Default: repo actual de la instancia.
 - `PROVISIONING_INSTANCE_BASE_DIR` (opcional): carpeta base donde se crean nuevas instancias. Default: parent del template.
 - `PROVISIONING_DB_CONTAINER`, `PROVISIONING_DB_USER`, `PROVISIONING_DB_PASSWORD`, `PROVISIONING_DB_HOST`, `PROVISIONING_DB_PORT`, `PROVISIONING_DB_PREFIX`.
 - `PROVISIONING_PORT_WEB_START`, `PROVISIONING_PORT_WEB_END` para asignacion automatica de puertos.
 - `PROVISIONING_TLS_EMAIL` para Certbot.
 - `PROVISIONING_LOCAL_HOSTS` (opcional): lista CSV de hosts considerados locales (ej: `127.0.0.1,localhost,74.208.218.120`) para ejecutar provisioning sin SSH.
+- `CORS_ORIGINS` (recomendado): lista CSV de origins permitidos para la API.
 
 ## Certificados
 - Certificados publicos: Let's Encrypt por dominio.

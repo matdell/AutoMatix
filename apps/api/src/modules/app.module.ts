@@ -17,10 +17,12 @@ import { StorageModule } from './storage/storage.module';
 import { PlacesModule } from './places/places.module';
 import { DocusignModule } from './docusign/docusign.module';
 import { BankProvisioningModule } from './bank-provisioning/bank-provisioning.module';
+import { RateLimitModule } from './common/rate-limit.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    RateLimitModule,
     PrismaModule,
     AuthModule,
     UsersModule,

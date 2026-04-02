@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -23,6 +22,7 @@ import { Role } from '@prisma/client';
 import { CurrentUser } from '../common/current-user.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { StorageService } from '../storage/storage.service';
+import { ensureImageFile, FILE_INTERCEPTOR_OPTIONS } from '../common/upload-security';
 
 @Controller('banks')
 export class BanksController {
@@ -56,19 +56,17 @@ export class BanksController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SUPERADMIN)
   @Post(':id/logo')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', FILE_INTERCEPTOR_OPTIONS))
   async uploadLogoById(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: { userId: string },
   ) {
-    if (!file?.buffer) {
-      throw new BadRequestException('Debes adjuntar un archivo de logo.');
-    }
+    const contentType = ensureImageFile(file);
     const upload = await this.storage.upload({
       tenantId: id,
       buffer: file.buffer,
-      contentType: file.mimetype,
+      contentType,
       filename: file.originalname,
       prefix: 'logos',
     });
@@ -105,18 +103,16 @@ export class BanksController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.BANK_ADMIN)
   @Post('me/logo')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', FILE_INTERCEPTOR_OPTIONS))
   async uploadLogo(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: { tenantId: string; userId: string },
   ) {
-    if (!file?.buffer) {
-      throw new BadRequestException('Debes adjuntar un archivo de logo.');
-    }
+    const contentType = ensureImageFile(file);
     const upload = await this.storage.upload({
       tenantId: user.tenantId,
       buffer: file.buffer,
-      contentType: file.mimetype,
+      contentType,
       filename: file.originalname,
       prefix: 'logos',
     });

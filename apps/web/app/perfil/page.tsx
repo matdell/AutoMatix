@@ -132,11 +132,28 @@ export default function PerfilPage() {
   const updateEmail2fa = async (enabled: boolean) => {
     setTwoFactorError(null);
     setTwoFactorSuccess(null);
+    let currentPassword: string | undefined;
+    let totpCode: string | undefined;
+    if (!enabled) {
+      const proof = window.prompt(
+        'Para desactivar 2FA por email, ingresa tu contrasena actual o un codigo TOTP de Google Authenticator.',
+      );
+      if (!proof?.trim()) {
+        setTwoFactorError('Se requiere validacion para desactivar 2FA por email.');
+        return;
+      }
+      const normalized = proof.trim();
+      if (/^\d{6}$/.test(normalized)) {
+        totpCode = normalized;
+      } else {
+        currentPassword = normalized;
+      }
+    }
     setTwoFactorLoading(true);
     try {
       const updated = await apiJson<{ twoFactorEmailEnabled: boolean; twoFactorTotpEnabled: boolean }>('/auth/2fa/email', {
         method: 'PATCH',
-        body: JSON.stringify({ enabled }),
+        body: JSON.stringify({ enabled, currentPassword, totpCode }),
       });
       setTwoFactorEmailEnabled(updated.twoFactorEmailEnabled);
       setTwoFactorTotpEnabled(updated.twoFactorTotpEnabled);
@@ -195,9 +212,27 @@ export default function PerfilPage() {
   const disableTotp = async () => {
     setTwoFactorError(null);
     setTwoFactorSuccess(null);
+    const proof = window.prompt(
+      'Para desactivar Google Authenticator, ingresa tu contrasena actual o un codigo TOTP vigente.',
+    );
+    if (!proof?.trim()) {
+      setTwoFactorError('Se requiere validacion para desactivar Google Authenticator.');
+      return;
+    }
+    let currentPassword: string | undefined;
+    let totpCode: string | undefined;
+    const normalized = proof.trim();
+    if (/^\d{6}$/.test(normalized)) {
+      totpCode = normalized;
+    } else {
+      currentPassword = normalized;
+    }
     setTwoFactorLoading(true);
     try {
-      await apiJson('/auth/2fa/totp/disable', { method: 'POST' });
+      await apiJson('/auth/2fa/totp/disable', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, totpCode }),
+      });
       setTwoFactorTotpEnabled(false);
       setTotpSetup(false);
       setTotpSecret('');

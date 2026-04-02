@@ -68,11 +68,15 @@ export class BankProvisioningService {
   }
 
   private getEncryptionSecret() {
-    return (
-      this.config.get<string>('PROVISIONING_CREDENTIALS_KEY') ||
-      this.config.get<string>('JWT_SECRET') ||
-      'local-dev-provisioning-key'
-    );
+    const secret = this.config.get<string>('PROVISIONING_CREDENTIALS_KEY')?.trim();
+    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+    if (!secret) {
+      throw new Error('PROVISIONING_CREDENTIALS_KEY es obligatorio para cifrar credenciales de provisioning.');
+    }
+    if (isProduction && secret.length < 32) {
+      throw new Error('PROVISIONING_CREDENTIALS_KEY debe tener al menos 32 caracteres en produccion.');
+    }
+    return secret;
   }
 
   private asJsonMap(value: Prisma.JsonValue | null | undefined): JsonMap {
@@ -330,14 +334,15 @@ export class BankProvisioningService {
         '-o',
         'BatchMode=yes',
         '-o',
-        'StrictHostKeyChecking=no',
-        '-o',
-        'UserKnownHostsFile=/dev/null',
-        '-o',
         'ConnectTimeout=20',
         '-p',
         String(params.sshPort),
       ];
+      const knownHostsPath =
+        this.config.get<string>('PROVISIONING_SSH_KNOWN_HOSTS_PATH')?.trim() ||
+        `${process.env.HOME || '/home/matias'}/.ssh/known_hosts`;
+      args.push('-o', 'StrictHostKeyChecking=yes');
+      args.push('-o', `UserKnownHostsFile=${knownHostsPath}`);
       if (keyPath) {
         args.push('-i', keyPath);
       }

@@ -40,6 +40,12 @@ export class NotificationsService {
       }
     } catch (error) {
       estado = 'ERROR';
+      // eslint-disable-next-line no-console
+      console.error('Error enviando notificacion', {
+        tipo: params.tipo,
+        destino: params.destino,
+        error: error instanceof Error ? error.message : 'unknown',
+      });
     }
 
     await this.prisma.notification.create({
@@ -56,38 +62,43 @@ export class NotificationsService {
   }
 
   async sendInvitation(tenantId: string, email: string, token: string) {
-    const acceptUrl = `${this.config.get<string>('APP_URL') || 'http://localhost:3000'}/invitaciones/${token}`;
+    const acceptUrl = `${this.config.get<string>('APP_URL') || 'http://localhost:3000'}/invitaciones/${encodeURIComponent(token)}`;
     await this.deliver({
       tenantId,
       tipo: NotificationType.INVITATION,
       destino: email,
       subject: 'Invitacion para participar en campañas',
       html: `<p>Fuiste invitado a gestionar campañas con tu banco.</p><p>Completa el proceso en: <strong>${acceptUrl}</strong></p>`,
-      payload: { token },
+      payload: { flow: 'invitation_accept' },
     });
   }
 
-  async sendWelcome(tenantId: string, email: string, nombre: string, password: string, bankSlug?: string) {
-    const loginUrl = `${this.config.get<string>('APP_URL') || 'http://localhost:3000'}/login`;
+  async sendWelcome(
+    tenantId: string,
+    email: string,
+    nombre: string,
+    passwordSetupToken: string,
+    bankSlug?: string,
+  ) {
+    const setupUrl = `${this.config.get<string>('APP_URL') || 'http://localhost:3000'}/reset-password?token=${encodeURIComponent(passwordSetupToken)}`;
     await this.deliver({
       tenantId,
       tipo: NotificationType.WELCOME,
       destino: email,
       subject: 'Tu usuario fue creado',
       html: `
-        <p>Hola ${nombre}, tu usuario en AutoMatix ya esta activo.</p>
+        <p>Hola ${nombre}, tu usuario en AutoMatix fue creado.</p>
         <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Password:</strong> ${password}</p>
         ${bankSlug ? `<p><strong>Banco (slug):</strong> ${bankSlug}</p>` : ''}
-        <p>Ingresa en: <strong>${loginUrl}</strong></p>
-        <p>Te recomendamos cambiar la contraseña luego del primer acceso.</p>
+        <p>Define tu contrasena inicial desde este enlace (valido por 24 horas):</p>
+        <p><strong>${setupUrl}</strong></p>
       `,
-      payload: { bankSlug },
+      payload: { bankSlug, flow: 'password_setup' },
     });
   }
 
   async sendPasswordReset(tenantId: string, email: string, token: string) {
-    const resetUrl = `${this.config.get<string>('APP_URL') || 'http://localhost:3000'}/reset-password?token=${token}`;
+    const resetUrl = `${this.config.get<string>('APP_URL') || 'http://localhost:3000'}/reset-password?token=${encodeURIComponent(token)}`;
     await this.deliver({
       tenantId,
       tipo: NotificationType.PASSWORD_RESET,
@@ -98,7 +109,7 @@ export class NotificationsService {
         <p>Usa este enlace para crear una nueva: <strong>${resetUrl}</strong></p>
         <p>Si no pediste este cambio, ignora este correo.</p>
       `,
-      payload: { token },
+      payload: { flow: 'password_reset' },
     });
   }
 
@@ -133,7 +144,7 @@ export class NotificationsService {
         <p style="font-size: 20px; font-weight: 700; letter-spacing: 2px;">${code}</p>
         <p>El codigo vence en 10 minutos.</p>
       `,
-      payload: { code },
+      payload: { flow: '2fa_email' },
     });
   }
 }

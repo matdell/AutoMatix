@@ -10,7 +10,8 @@ export class PlacesService {
     if (!apiKey) {
       return null;
     }
-    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=geometry,formatted_address,address_component&key=${apiKey}`;
+    const safePlaceId = encodeURIComponent(placeId);
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${safePlaceId}&fields=geometry,formatted_address,address_component&key=${apiKey}`;
     const response = await fetch(url);
     if (!response.ok) {
       return null;

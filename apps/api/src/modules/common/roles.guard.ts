@@ -3,6 +3,23 @@ import { Reflector } from '@nestjs/core';
 import { Role } from '@prisma/client';
 import { ROLES_KEY } from './roles.decorator';
 
+const roleHierarchy: Record<Role, Role[]> = {
+  SUPERADMIN: [],
+  BANK_ADMIN: [],
+  BANK_OPS: [],
+  BANK_APPROVER: [],
+  BANK_BRANCH_MANAGER: [],
+  BANK_BRANCH_OPERATOR: [],
+  BRAND_ADMIN: [],
+  LEGAL_ENTITY_ADMIN: [],
+  POS_ADMIN: [],
+  MERCHANT_ADMIN: [],
+  MERCHANT_USER: [],
+  ADMIN: [Role.BANK_ADMIN, Role.BANK_OPS],
+  MERCHANT: [Role.MERCHANT_USER],
+  OPERATIONS: [Role.BANK_OPS],
+};
+
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
@@ -15,43 +32,16 @@ export class RolesGuard implements CanActivate {
     if (!requiredRoles || requiredRoles.length === 0) {
       return true;
     }
-    const { user } = context.switchToHttp().getRequest();
-    if (user?.role === Role.SUPERADMIN) {
+    const { user } = context.switchToHttp().getRequest<{ user?: { role?: Role } }>();
+    const userRole = user?.role;
+    if (!userRole) {
+      return false;
+    }
+    if (userRole === Role.SUPERADMIN) {
       return true;
     }
-    const effectiveRoles = new Set<Role>([user?.role]);
-    if (user?.role === Role.ADMIN) {
-      effectiveRoles.add(Role.BANK_ADMIN);
-      effectiveRoles.add(Role.BANK_OPS);
-    }
-    if (user?.role === Role.OPERATIONS) {
-      effectiveRoles.add(Role.BANK_OPS);
-    }
-    if (user?.role === Role.MERCHANT) {
-      effectiveRoles.add(Role.MERCHANT_USER);
-    }
-    if (user?.role === Role.MERCHANT_USER) {
-      effectiveRoles.add(Role.POS_ADMIN);
-      effectiveRoles.add(Role.LEGAL_ENTITY_ADMIN);
-    }
-    if (user?.role === Role.BANK_ADMIN) {
-      effectiveRoles.add(Role.BANK_OPS);
-    }
-    if (user?.role === Role.BANK_BRANCH_MANAGER) {
-      effectiveRoles.add(Role.BANK_BRANCH_OPERATOR);
-    }
-    if (user?.role === Role.BRAND_ADMIN) {
-      effectiveRoles.add(Role.LEGAL_ENTITY_ADMIN);
-      effectiveRoles.add(Role.POS_ADMIN);
-    }
-    if (user?.role === Role.LEGAL_ENTITY_ADMIN) {
-      effectiveRoles.add(Role.POS_ADMIN);
-    }
-    if (user?.role === Role.MERCHANT_ADMIN) {
-      effectiveRoles.add(Role.MERCHANT_USER);
-      effectiveRoles.add(Role.LEGAL_ENTITY_ADMIN);
-      effectiveRoles.add(Role.POS_ADMIN);
-    }
+    const inherited = roleHierarchy[userRole] ?? [];
+    const effectiveRoles = new Set<Role>([userRole, ...inherited]);
     return requiredRoles.some((role) => effectiveRoles.has(role));
   }
 }

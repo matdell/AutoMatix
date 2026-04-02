@@ -243,6 +243,18 @@ export class BanksService {
       throw new BadRequestException('No se puede borrar un banco con datos asociados. Desactivalo primero.');
     }
 
+    await this.audit.log({
+      tenantId: bankId,
+      userId: actorId ?? null,
+      action: AuditAction.DELETE,
+      entity: 'Bank',
+      entityId: bankId,
+      before: {
+        nombre: bank.nombre,
+        slug: bank.slug,
+      },
+    });
+
     await this.prisma.bank.delete({ where: { id: bankId } });
 
     return { ok: true };

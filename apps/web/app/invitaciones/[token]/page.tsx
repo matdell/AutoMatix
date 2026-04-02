@@ -51,10 +51,18 @@ export default function InvitacionTokenPage() {
   };
 
   const onReject = async () => {
+    if (!email.trim()) {
+      setStatus('error');
+      setMessage('Ingresa el email de la invitacion para rechazarla.');
+      return;
+    }
     setLoading(true);
     setMessage(null);
     try {
-      await apiJson(`/invitations/${token}/reject`, { method: 'POST' });
+      await apiJson(`/invitations/${token}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim() }),
+      });
       setStatus('ok');
       setMessage('Invitacion rechazada.');
     } catch (err) {

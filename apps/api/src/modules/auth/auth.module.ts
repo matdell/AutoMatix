@@ -8,16 +8,28 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { JwtRefreshInterceptor } from '../common/jwt-refresh.interceptor';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
     PassportModule,
     NotificationsModule,
+    AuditModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET') || 'dev_secret',
-        signOptions: { expiresIn: '24h' },
+        secret: (() => {
+          const jwtSecret = config.get<string>('JWT_SECRET')?.trim();
+          const isProduction = config.get<string>('NODE_ENV') === 'production';
+          if (!jwtSecret) {
+            throw new Error('JWT_SECRET es obligatorio.');
+          }
+          if (isProduction && jwtSecret.length < 32) {
+            throw new Error('JWT_SECRET debe tener al menos 32 caracteres en produccion.');
+          }
+          return jwtSecret;
+        })(),
+        signOptions: { expiresIn: '24h', algorithm: 'HS256' },
       }),
     }),
   ],

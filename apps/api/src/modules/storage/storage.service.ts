@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { detectImageMimeTypeFromBuffer } from '../common/upload-security';
 
 interface UploadInput {
   tenantId: string;
@@ -32,12 +33,14 @@ export class StorageService {
   async upload(input: UploadInput) {
     const safeName = input.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
     const key = `${input.tenantId}/${input.prefix}/${Date.now()}-${safeName}`;
+    const detectedImageType = detectImageMimeTypeFromBuffer(input.buffer);
+    const contentType = detectedImageType || input.contentType || 'application/octet-stream';
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: key,
         Body: input.buffer,
-        ContentType: input.contentType,
+        ContentType: contentType,
       }),
     );
 

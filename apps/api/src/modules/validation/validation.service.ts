@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction, MerchantStatus } from '@prisma/client';
@@ -17,13 +17,16 @@ export class ValidationService {
     return /^[A-Z0-9-]{6,}$/.test(value);
   }
 
-  async run(tenantId: string, merchantId?: string, actorId?: string) {
+  async run(tenantId: string, merchantId: string, actorId?: string) {
     const merchants = await this.prisma.merchant.findMany({
       where: {
         tenantId,
         id: merchantId,
       },
     });
+    if (merchants.length === 0) {
+      throw new BadRequestException('Razon social no encontrada para este banco');
+    }
 
     let errores = 0;
 

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
@@ -62,24 +62,19 @@ export class InvitationsService {
       include: { branches: true },
     });
 
-    if (!invitation) {
-      throw new NotFoundException('Invitacion no encontrada');
-    }
-
-    if (invitation.status !== InvitationStatus.INVITED) {
-      throw new BadRequestException('La invitacion ya fue procesada');
-    }
-
-    if (dto.email.toLowerCase() !== invitation.email.toLowerCase()) {
-      throw new BadRequestException('El email no coincide con la invitacion');
-    }
-
-    if (invitation.expiresAt && invitation.expiresAt < new Date()) {
+    if (invitation?.expiresAt && invitation.expiresAt < new Date()) {
       await this.prisma.invitation.update({
         where: { id: invitation.id },
         data: { status: InvitationStatus.EXPIRED },
       });
-      throw new BadRequestException('La invitacion ha expirado');
+    }
+    if (
+      !invitation ||
+      invitation.status !== InvitationStatus.INVITED ||
+      (invitation.expiresAt && invitation.expiresAt < new Date()) ||
+      dto.email.toLowerCase() !== invitation.email.toLowerCase()
+    ) {
+      throw new BadRequestException('Invitacion invalida o expirada');
     }
 
     let merchantId = invitation.merchantId;
@@ -100,7 +95,7 @@ export class InvitationsService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    await this.prisma.user.create({
+    const createdUser = await this.prisma.user.create({
       data: {
         tenantId: invitation.tenantId,
         email: dto.email,
@@ -108,6 +103,17 @@ export class InvitationsService {
         nombre: dto.nombre,
         role: Role.MERCHANT_ADMIN,
         merchantId,
+      },
+    });
+    await this.audit.log({
+      tenantId: invitation.tenantId,
+      action: AuditAction.CREATE,
+      entity: 'User',
+      entityId: createdUser.id,
+      after: {
+        email: createdUser.email,
+        role: createdUser.role,
+        merchantId: createdUser.merchantId,
       },
     });
 
@@ -128,10 +134,15 @@ export class InvitationsService {
     return { ok: true };
   }
 
-  async reject(token: string) {
+  async reject(token: string, email: string) {
     const invitation = await this.prisma.invitation.findUnique({ where: { token } });
-    if (!invitation) {
-      throw new NotFoundException('Invitacion no encontrada');
+    if (
+      !invitation ||
+      invitation.status !== InvitationStatus.INVITED ||
+      !email ||
+      invitation.email.toLowerCase() !== email.toLowerCase()
+    ) {
+      throw new BadRequestException('Invitacion invalida o expirada');
     }
 
     const updated = await this.prisma.invitation.update({

@@ -9,11 +9,12 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import bcrypt from 'bcryptjs';
 import { JwtPayload } from '../common/auth.types';
-import { Prisma, Role } from '@prisma/client';
+import { AuditAction, Prisma, Role } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomInt } from 'crypto';
 import { authenticator } from 'otplib';
 import { ConfigService } from '@nestjs/config';
+import { AuditService } from '../audit/audit.service';
 
 authenticator.options = { window: 1 };
 
@@ -24,7 +25,32 @@ export class AuthService {
     private jwtService: JwtService,
     private notifications: NotificationsService,
     private config: ConfigService,
+    private audit: AuditService,
   ) {}
+
+  private async logAuthEvent(params: {
+    tenantId: string;
+    userId?: string | null;
+    action: AuditAction;
+    entity: string;
+    entityId: string;
+    before?: Record<string, unknown> | null;
+    after?: Record<string, unknown> | null;
+  }) {
+    try {
+      await this.audit.log({
+        tenantId: params.tenantId,
+        userId: params.userId ?? null,
+        action: params.action,
+        entity: params.entity,
+        entityId: params.entityId,
+        before: params.before ?? null,
+        after: params.after ?? null,
+      });
+    } catch {
+      // No interrumpe autenticacion por problemas de auditoria.
+    }
+  }
 
   private normalizeHost(rawHost?: string | null) {
     if (!rawHost) {
@@ -113,6 +139,14 @@ export class AuthService {
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });
+    await this.logAuthEvent({
+      tenantId: user.tenantId,
+      userId: user.id,
+      action: AuditAction.UPDATE,
+      entity: 'AuthSession',
+      entityId: user.id,
+      after: { event: 'login_success' },
+    });
 
     const payload = this.buildJwtPayload(user);
 
@@ -140,7 +174,7 @@ export class AuthService {
   }
 
   private generateEmailCode() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return randomInt(100000, 1000000).toString();
   }
 
   private async createTwoFactorSession(user: {
@@ -177,7 +211,7 @@ export class AuthService {
   async login(dto: LoginDto, requestHost?: string) {
     const bank = await this.resolveBankForLogin(dto, requestHost);
     if (!bank) {
-      throw new UnauthorizedException('Banco no encontrado para este dominio.');
+      throw new UnauthorizedException('Credenciales invalidas');
     }
     const user = await this.prisma.user.findFirst({
       where: {
@@ -376,16 +410,33 @@ export class AuthService {
         pointOfSaleId: posRoles.has(dto.role) ? dto.pointOfSaleId ?? null : null,
       },
     });
+    await this.logAuthEvent({
+      tenantId: targetTenantId,
+      userId: null,
+      action: AuditAction.CREATE,
+      entity: 'User',
+      entityId: user.id,
+      after: { email: user.email, role: user.role },
+    });
 
     const bank = await this.prisma.bank.findUnique({
       where: { id: targetTenantId },
       select: { slug: true },
     });
+    const passwordSetupToken = randomBytes(32).toString('hex');
+    const passwordSetupExpiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24);
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        token: passwordSetupToken,
+        expiresAt: passwordSetupExpiresAt,
+      },
+    });
     await this.notifications.sendWelcome(
       targetTenantId,
       user.email,
       user.nombre,
-      dto.password,
+      passwordSetupToken,
       bank?.slug ?? undefined,
     );
 
@@ -465,6 +516,14 @@ export class AuthService {
       where: { id: userId },
       data: { passwordHash },
     });
+    await this.logAuthEvent({
+      tenantId,
+      userId,
+      action: AuditAction.UPDATE,
+      entity: 'User',
+      entityId: userId,
+      after: { event: 'password_changed' },
+    });
     return { ok: true };
   }
 
@@ -499,6 +558,15 @@ export class AuthService {
 
     const token = randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60);
+    await this.prisma.passwordResetToken.updateMany({
+      where: {
+        userId: user.id,
+        usedAt: null,
+      },
+      data: {
+        usedAt: new Date(),
+      },
+    });
     await this.prisma.passwordResetToken.create({
       data: {
         userId: user.id,
@@ -507,6 +575,14 @@ export class AuthService {
       },
     });
     await this.notifications.sendPasswordReset(bank.id, user.email, token);
+    await this.logAuthEvent({
+      tenantId: bank.id,
+      userId: user.id,
+      action: AuditAction.UPDATE,
+      entity: 'User',
+      entityId: user.id,
+      after: { event: 'password_reset_requested' },
+    });
 
     return { ok: true };
   }
@@ -525,18 +601,71 @@ export class AuthService {
       where: { id: record.userId },
       data: { passwordHash },
     });
-    await this.prisma.passwordResetToken.update({
-      where: { id: record.id },
+    await this.prisma.passwordResetToken.updateMany({
+      where: { userId: record.userId, usedAt: null },
       data: { usedAt: new Date() },
+    });
+    await this.logAuthEvent({
+      tenantId: record.user.tenantId,
+      userId: record.userId,
+      action: AuditAction.UPDATE,
+      entity: 'User',
+      entityId: record.userId,
+      after: { event: 'password_reset_completed' },
     });
 
     return { ok: true };
   }
 
-  async updateTwoFactorEmail(userId: string, tenantId: string, enabled: boolean) {
+  private async assertSensitiveActionVerification(
+    user: {
+      passwordHash: string;
+      twoFactorTotpEnabled: boolean;
+      twoFactorTotpSecret: string | null;
+    },
+    currentPassword?: string,
+    totpCode?: string,
+  ) {
+    const normalizedPassword = currentPassword?.trim();
+    const normalizedTotp = totpCode?.replace(/\s/g, '');
+    if (!normalizedPassword && !normalizedTotp) {
+      throw new BadRequestException('Debes confirmar con contrasena actual o codigo de Google Authenticator');
+    }
+
+    if (normalizedPassword) {
+      const isValidPassword = await bcrypt.compare(normalizedPassword, user.passwordHash);
+      if (!isValidPassword) {
+        throw new BadRequestException('La contrasena actual es incorrecta');
+      }
+      return;
+    }
+
+    if (!user.twoFactorTotpEnabled || !user.twoFactorTotpSecret) {
+      throw new BadRequestException('Google Authenticator no esta habilitado');
+    }
+
+    const isValidTotp = authenticator.verify({
+      token: normalizedTotp ?? '',
+      secret: user.twoFactorTotpSecret,
+    });
+    if (!isValidTotp) {
+      throw new BadRequestException('Codigo invalido');
+    }
+  }
+
+  async updateTwoFactorEmail(
+    userId: string,
+    tenantId: string,
+    enabled: boolean,
+    currentPassword?: string,
+    totpCode?: string,
+  ) {
     const user = await this.prisma.user.findFirst({ where: { id: userId, tenantId } });
     if (!user) {
       throw new UnauthorizedException('Usuario no encontrado');
+    }
+    if (!enabled) {
+      await this.assertSensitiveActionVerification(user, currentPassword, totpCode);
     }
     const updated = await this.prisma.user.update({
       where: { id: userId },
@@ -546,6 +675,15 @@ export class AuthService {
         twoFactorEmailEnabled: true,
         twoFactorTotpEnabled: true,
       },
+    });
+    await this.logAuthEvent({
+      tenantId,
+      userId,
+      action: AuditAction.UPDATE,
+      entity: 'User',
+      entityId: userId,
+      before: { twoFactorEmailEnabled: user.twoFactorEmailEnabled },
+      after: { twoFactorEmailEnabled: updated.twoFactorEmailEnabled },
     });
     return updated;
   }
@@ -591,19 +729,42 @@ export class AuthService {
       where: { id: userId },
       data: { twoFactorTotpEnabled: true },
     });
+    await this.logAuthEvent({
+      tenantId,
+      userId,
+      action: AuditAction.UPDATE,
+      entity: 'User',
+      entityId: userId,
+      after: { twoFactorTotpEnabled: true },
+    });
 
     return { ok: true };
   }
 
-  async disableTotp(userId: string, tenantId: string) {
+  async disableTotp(
+    userId: string,
+    tenantId: string,
+    currentPassword?: string,
+    totpCode?: string,
+  ) {
     const user = await this.prisma.user.findFirst({ where: { id: userId, tenantId } });
     if (!user) {
       throw new UnauthorizedException('Usuario no encontrado');
     }
+    await this.assertSensitiveActionVerification(user, currentPassword, totpCode);
 
     await this.prisma.user.update({
       where: { id: userId },
       data: { twoFactorTotpEnabled: false, twoFactorTotpSecret: null },
+    });
+    await this.logAuthEvent({
+      tenantId,
+      userId,
+      action: AuditAction.UPDATE,
+      entity: 'User',
+      entityId: userId,
+      before: { twoFactorTotpEnabled: user.twoFactorTotpEnabled },
+      after: { twoFactorTotpEnabled: false },
     });
 
     return { ok: true };

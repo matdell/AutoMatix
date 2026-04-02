@@ -19,6 +19,7 @@ import { Role } from '@prisma/client';
 import { CurrentUser } from '../common/current-user.decorator';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ensureCsvFile, FILE_INTERCEPTOR_OPTIONS } from '../common/upload-security';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -140,12 +141,13 @@ export class UsersController {
   }
 
   @Post('import')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', FILE_INTERCEPTOR_OPTIONS))
   async importCsv(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: { tenantId: string; userId: string; role: Role },
     @Query('bankId') bankId?: string,
   ) {
+    ensureCsvFile(file);
     const resolvedTenantId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
     return this.usersService.importCsv(resolvedTenantId, file.buffer, user.userId);
   }

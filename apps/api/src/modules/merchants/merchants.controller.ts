@@ -21,6 +21,7 @@ import { CurrentUser } from '../common/current-user.decorator';
 import { CreateMerchantDto } from './dto/create-merchant.dto';
 import { UpdateMerchantDto } from './dto/update-merchant.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ensureCsvFile, FILE_INTERCEPTOR_OPTIONS } from '../common/upload-security';
 
 @Controller('merchants')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -218,12 +219,13 @@ export class MerchantsController {
 
   @Post('import')
   @Roles(Role.SUPERADMIN, Role.BANK_ADMIN, Role.BANK_OPS)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', FILE_INTERCEPTOR_OPTIONS))
   async importCsv(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: { tenantId: string; userId: string; role: Role },
     @Query('bankId') bankId?: string,
   ) {
+    ensureCsvFile(file);
     const resolvedTenantId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
     return this.merchantsService.importCsv(resolvedTenantId, file.buffer, user.userId);
   }
@@ -237,7 +239,7 @@ export class MerchantsController {
     Role.LEGAL_ENTITY_ADMIN,
     Role.MERCHANT_ADMIN,
   )
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', FILE_INTERCEPTOR_OPTIONS))
   async importMyData(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: {
@@ -250,6 +252,7 @@ export class MerchantsController {
     @Query('includeBankSpecificData') includeBankSpecificData?: string,
     @Query('bankId') bankId?: string,
   ) {
+    ensureCsvFile(file);
     const resolvedTenantId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
     const scopedBrandId = user.role === Role.BRAND_ADMIN ? user.brandId ?? undefined : undefined;
     const scopedMerchantId =
