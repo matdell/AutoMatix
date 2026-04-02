@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -54,6 +55,32 @@ export class BanksController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SUPERADMIN)
+  @Post(':id/logo')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadLogoById(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: { userId: string },
+  ) {
+    if (!file?.buffer) {
+      throw new BadRequestException('Debes adjuntar un archivo de logo.');
+    }
+    const upload = await this.storage.upload({
+      tenantId: id,
+      buffer: file.buffer,
+      contentType: file.mimetype,
+      filename: file.originalname,
+      prefix: 'logos',
+    });
+    return this.banksService.updateById(
+      id,
+      { logoUrl: upload.url },
+      user.userId,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPERADMIN)
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() user: { userId: string }) {
     return this.banksService.remove(id, user.userId);
@@ -83,6 +110,9 @@ export class BanksController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: { tenantId: string; userId: string },
   ) {
+    if (!file?.buffer) {
+      throw new BadRequestException('Debes adjuntar un archivo de logo.');
+    }
     const upload = await this.storage.upload({
       tenantId: user.tenantId,
       buffer: file.buffer,

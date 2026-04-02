@@ -367,6 +367,7 @@ export class BankProvisioningService {
       razonSocial: string | null;
       cuit: string | null;
       direccionCasaMatriz: string | null;
+      logoUrl: string | null;
       paymentMethods: string[];
       bines: string[];
       fechaAlta: Date | null;
@@ -526,6 +527,7 @@ async function main() {
       razonSocial: bank.razonSocial,
       cuit: bank.cuit,
       direccionCasaMatriz: bank.direccionCasaMatriz,
+      logoUrl: bank.logoUrl || null,
       paymentMethods: bank.paymentMethods || [],
       bines: bank.bines || [],
       fechaAlta: bank.fechaAlta ? new Date(bank.fechaAlta) : null,
@@ -539,6 +541,7 @@ async function main() {
       razonSocial: bank.razonSocial,
       cuit: bank.cuit,
       direccionCasaMatriz: bank.direccionCasaMatriz,
+      logoUrl: bank.logoUrl || null,
       paymentMethods: bank.paymentMethods || [],
       bines: bank.bines || [],
       fechaAlta: bank.fechaAlta ? new Date(bank.fechaAlta) : null,
@@ -733,6 +736,7 @@ echo "__PROVISION_RESULT__ instanceDir=$TARGET_DIR apiPort=$API_PORT webPort=$WE
           razonSocial: true,
           cuit: true,
           direccionCasaMatriz: true,
+          logoUrl: true,
           paymentMethods: true,
           bines: true,
           fechaAlta: true,

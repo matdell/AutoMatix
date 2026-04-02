@@ -1,8 +1,8 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import AppShell from '@/app/_components/AppShell';
-import { apiJson, getToken } from '@/lib/api';
+import { apiFetch, apiJson, getToken } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 
 type Bank = {
@@ -130,6 +130,8 @@ export default function SuperAdminBanksPage() {
   const [bankUpdating, setBankUpdating] = useState(false);
   const [bankDeletingId, setBankDeletingId] = useState<string | null>(null);
   const [bankTogglingId, setBankTogglingId] = useState<string | null>(null);
+  const [bankLogoUploadingId, setBankLogoUploadingId] = useState<string | null>(null);
+  const [logoUploadBankId, setLogoUploadBankId] = useState<string | null>(null);
   const [editingBank, setEditingBank] = useState<Bank | null>(null);
   const [editNombre, setEditNombre] = useState('');
   const [editSlug, setEditSlug] = useState('');
@@ -147,6 +149,7 @@ export default function SuperAdminBanksPage() {
   const [bulkActivo, setBulkActivo] = useState<BulkStatus>('keep');
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const selectAllRef = useRef<HTMLInputElement | null>(null);
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
 
   const [branchNombre, setBranchNombre] = useState('');
   const [branchCodigo, setBranchCodigo] = useState('');
@@ -464,6 +467,52 @@ export default function SuperAdminBanksPage() {
     }
   };
 
+  const triggerLogoUpload = (bankId: string) => {
+    setLogoUploadBankId(bankId);
+    logoInputRef.current?.click();
+  };
+
+  const uploadBankLogo = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !logoUploadBankId) {
+      return;
+    }
+
+    setError(null);
+    setSuccess(null);
+    setBankLogoUploadingId(logoUploadBankId);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await apiFetch(`/banks/${logoUploadBankId}/logo`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) {
+        let message = 'No se pudo subir el logo del banco';
+        try {
+          const body = await response.json();
+          if (Array.isArray(body?.message)) {
+            message = body.message.join(', ');
+          } else if (typeof body?.message === 'string') {
+            message = body.message;
+          }
+        } catch {
+          // noop
+        }
+        throw new Error(message);
+      }
+      setSuccess('Logo del banco actualizado correctamente.');
+      await loadBanks();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo subir el logo del banco');
+    } finally {
+      setBankLogoUploadingId(null);
+      setLogoUploadBankId(null);
+      event.target.value = '';
+    }
+  };
+
   const onBulkUpdate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (selectedBankIds.length === 0) return;
@@ -759,6 +808,13 @@ export default function SuperAdminBanksPage() {
             ) : null}
 
             <section className="bg-surface-container-lowest rounded-2xl p-6 shadow-[0px_12px_32px_rgba(42,52,57,0.06)] space-y-6">
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={uploadBankLogo}
+              />
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-on-surface">Listado de bancos</h2>
@@ -1029,6 +1085,14 @@ export default function SuperAdminBanksPage() {
                                   onClick={() => startEditBank(bank)}
                                 >
                                   Editar
+                                </button>
+                                <button
+                                  type="button"
+                                  className="text-xs font-bold text-indigo-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => triggerLogoUpload(bank.id)}
+                                  disabled={bankLogoUploadingId !== null}
+                                >
+                                  {bankLogoUploadingId === bank.id ? 'Subiendo logo...' : 'Logo'}
                                 </button>
                                 <button
                                   type="button"
