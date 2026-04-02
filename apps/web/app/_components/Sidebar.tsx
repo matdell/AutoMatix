@@ -11,6 +11,13 @@ type NavItem = {
   icon: string;
 };
 
+const centralHostnames = (process.env.NEXT_PUBLIC_CENTRAL_HOSTS ?? '')
+  .split(',')
+  .map((host) => host.trim().toLowerCase())
+  .filter(Boolean);
+
+const defaultCentralHostnames = ['devbank.automatixpay.com', 'devbankstaging.automatixpay.com'];
+
 const baseItems: NavItem[] = [
   { href: '/dashboard', label: 'Tablero', icon: 'dashboard' },
   { href: '/campanas', label: 'Campanas', icon: 'campaign' },
@@ -29,6 +36,12 @@ const superAdminItems: NavItem[] = [
   { href: '/superadmin/brands', label: 'Marcas', icon: 'branding_watermark' },
 ];
 
+const centralSuperAdminItems: NavItem[] = [
+  { href: '/superadmin/users', label: 'Usuarios', icon: 'group' },
+  { href: '/superadmin/banks', label: 'Bancos', icon: 'account_balance' },
+  { href: '/perfil', label: 'Perfil', icon: 'account_circle' },
+];
+
 const footerItems: NavItem[] = [
   { href: '#', label: 'Configuracion', icon: 'settings' },
   { href: '#', label: 'Soporte', icon: 'contact_support' },
@@ -44,6 +57,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const router = useRouter();
   const [userRole, setUserRole] = useState<string | null>(null);
   const [bankLogoUrl, setBankLogoUrl] = useState<string | null>(null);
+  const [isCentralHost, setIsCentralHost] = useState(false);
 
   useEffect(() => {
     const raw = window.localStorage.getItem('user');
@@ -54,6 +68,13 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     } catch {
       setUserRole(null);
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const host = window.location.hostname.toLowerCase();
+    const allowedHosts = centralHostnames.length > 0 ? centralHostnames : defaultCentralHostnames;
+    setIsCentralHost(allowedHosts.includes(host));
   }, []);
 
   useEffect(() => {
@@ -78,7 +99,13 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     };
   }, [userRole]);
 
-  const primaryItems = useMemo(() => baseItems, []);
+  const useCentralSuperAdminMenu = userRole === 'SUPERADMIN' && isCentralHost;
+  const primaryItems = useMemo(() => {
+    if (useCentralSuperAdminMenu) {
+      return centralSuperAdminItems;
+    }
+    return baseItems;
+  }, [useCentralSuperAdminMenu]);
 
   const isActive = (href: string) => {
     if (!href || href === '#') return false;
@@ -164,7 +191,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             </a>
           );
 
-          if (index !== 0 || userRole !== 'SUPERADMIN') {
+          if (index !== 0 || userRole !== 'SUPERADMIN' || useCentralSuperAdminMenu) {
             return link;
           }
 
