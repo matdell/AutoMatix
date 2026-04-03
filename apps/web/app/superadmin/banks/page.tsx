@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 're
 import AppShell from '@/app/_components/AppShell';
 import { apiFetch, apiJson, getToken } from '@/lib/api';
 import { useRouter } from 'next/navigation';
+import { isCurrentCentralHost } from '@/lib/platform';
 
 type Bank = {
   id: string;
@@ -96,6 +97,7 @@ function Modal({ open, title, onClose, children }: ModalProps) {
 export default function SuperAdminBanksPage() {
   const router = useRouter();
   const [role, setRole] = useState<string | null>(null);
+  const [isCentralHost, setIsCentralHost] = useState(false);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [expandedBankId, setExpandedBankId] = useState<string | null>(null);
   const [branchCache, setBranchCache] = useState<Record<string, BankBranch[]>>({});
@@ -184,12 +186,14 @@ export default function SuperAdminBanksPage() {
   const [provisioningNotes, setProvisioningNotes] = useState('');
 
   const isSuperAdmin = role === 'SUPERADMIN';
+  const showBranchControls = !isCentralHost;
 
   useEffect(() => {
     if (getToken() === null) {
       router.push('/login');
       return;
     }
+    setIsCentralHost(isCurrentCentralHost());
     const raw = window.localStorage.getItem('user');
     if (raw === null) return;
     try {
@@ -623,6 +627,22 @@ export default function SuperAdminBanksPage() {
     }
   };
 
+  const onDeleteBranch = async (bankId: string, branch: BankBranch) => {
+    const confirmed = window.confirm(`Eliminar la sucursal "${branch.nombre}"?`);
+    if (!confirmed) return;
+    setError(null);
+    setSuccess(null);
+    try {
+      await apiJson(`/bank-branches/${branch.id}?bankId=${bankId}`, {
+        method: 'DELETE',
+      });
+      setSuccess('Sucursal eliminada.');
+      await loadBranches(bankId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo eliminar la sucursal');
+    }
+  };
+
   const onCreateProvisioningRequest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!provisioningBank) return;
@@ -771,6 +791,8 @@ export default function SuperAdminBanksPage() {
     return `https://${raw}`;
   };
 
+  const tableColumnCount = showBranchControls ? 10 : 8;
+
   return (
     <AppShell>
       <header className="fixed top-0 left-[var(--sidebar-width)] right-0 h-16 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/15 flex items-center justify-between px-8 shadow-[0px_12px_32px_rgba(42,52,57,0.06)] font-['Inter'] antialiased tracking-tight">
@@ -783,13 +805,15 @@ export default function SuperAdminBanksPage() {
           >
             Crear banco
           </button>
-          <button
-            className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-700 hover:border-slate-300"
-            type="button"
-            onClick={() => setShowBranchModal(true)}
-          >
-            Crear sucursal
-          </button>
+          {showBranchControls ? (
+            <button
+              className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-700 hover:border-slate-300"
+              type="button"
+              onClick={() => setShowBranchModal(true)}
+            >
+              Crear sucursal
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -818,7 +842,9 @@ export default function SuperAdminBanksPage() {
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-on-surface">Listado de bancos</h2>
-                  <p className="text-sm text-on-surface-variant">Datos principales y sucursales desplegables.</p>
+                  <p className="text-sm text-on-surface-variant">
+                    {showBranchControls ? 'Datos principales y sucursales desplegables.' : 'Datos principales.'}
+                  </p>
                 </div>
                 <div className="flex items-center gap-3">
                   <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
@@ -900,9 +926,11 @@ export default function SuperAdminBanksPage() {
                           }}
                         />
                       </th>
-                      <th className="px-4 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest w-10">
-                        &nbsp;
-                      </th>
+                      {showBranchControls ? (
+                        <th className="px-4 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest w-10">
+                          &nbsp;
+                        </th>
+                      ) : null}
                       <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
                         Banco
                       </th>
@@ -921,9 +949,11 @@ export default function SuperAdminBanksPage() {
                       <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">
                         Estado
                       </th>
-                      <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-right">
-                        Sucursales
-                      </th>
+                      {showBranchControls ? (
+                        <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-right">
+                          Sucursales
+                        </th>
+                      ) : null}
                       <th className="px-6 py-4 text-[11px] font-bold text-on-surface-variant uppercase tracking-widest text-right">
                         Acciones
                       </th>
@@ -932,14 +962,14 @@ export default function SuperAdminBanksPage() {
                   <tbody className="divide-y divide-slate-50">
                     {loadingBanks ? (
                       <tr>
-                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={10}>
+                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={tableColumnCount}>
                           Cargando bancos...
                         </td>
                       </tr>
                     ) : null}
                     {loadingBanks === false && paginatedBanks.length === 0 ? (
                       <tr>
-                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={10}>
+                        <td className="px-6 py-6 text-sm text-on-surface-variant" colSpan={tableColumnCount}>
                           No hay bancos para este filtro.
                         </td>
                       </tr>
@@ -975,26 +1005,28 @@ export default function SuperAdminBanksPage() {
                                 onChange={() => toggleSelectBank(bank.id)}
                               />
                             </td>
-                            <td className="px-4 py-4">
-                              <button
-                                type="button"
-                                aria-expanded={expanded}
-                                aria-label={expanded ? 'Ocultar sucursales' : 'Ver sucursales'}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
-                                onClick={() => {
-                                  setSelectedBankId(bank.id);
-                                  toggleExpand(bank.id);
-                                }}
-                              >
-                                <span
-                                  className={`material-symbols-outlined text-base transition-transform ${
-                                    expanded ? 'rotate-90' : ''
-                                  }`}
+                            {showBranchControls ? (
+                              <td className="px-4 py-4">
+                                <button
+                                  type="button"
+                                  aria-expanded={expanded}
+                                  aria-label={expanded ? 'Ocultar sucursales' : 'Ver sucursales'}
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+                                  onClick={() => {
+                                    setSelectedBankId(bank.id);
+                                    toggleExpand(bank.id);
+                                  }}
                                 >
-                                  chevron_right
-                                </span>
-                              </button>
-                            </td>
+                                  <span
+                                    className={`material-symbols-outlined text-base transition-transform ${
+                                      expanded ? 'rotate-90' : ''
+                                    }`}
+                                  >
+                                    chevron_right
+                                  </span>
+                                </button>
+                              </td>
+                            ) : null}
                             <td className="px-6 py-4">
                               <div className="flex items-start gap-3">
                                 <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100 text-[10px] font-bold uppercase text-slate-500">
@@ -1061,15 +1093,17 @@ export default function SuperAdminBanksPage() {
                                 {isActive ? 'Activa' : 'Inactiva'}
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-right">
-                              <div className="text-xs font-semibold text-on-surface-variant">
-                                {isLoadingBranches
-                                  ? 'Cargando...'
-                                  : hasCachedBranches
-                                    ? `${branches.length} cargadas`
-                                    : 'Sin cargar'}
-                              </div>
-                            </td>
+                            {showBranchControls ? (
+                              <td className="px-6 py-4 text-right">
+                                <div className="text-xs font-semibold text-on-surface-variant">
+                                  {isLoadingBranches
+                                    ? 'Cargando...'
+                                    : hasCachedBranches
+                                      ? `${branches.length} cargadas`
+                                      : 'Sin cargar'}
+                                </div>
+                              </td>
+                            ) : null}
                             <td className="px-6 py-4 text-right">
                               <div className="flex items-center justify-end gap-3">
                                 <button
@@ -1113,9 +1147,9 @@ export default function SuperAdminBanksPage() {
                               </div>
                             </td>
                           </tr>
-                          {expanded ? (
+                          {showBranchControls && expanded ? (
                             <tr key={`${bank.id}-branches`}>
-                              <td colSpan={10} className="px-6 pb-6">
+                              <td colSpan={tableColumnCount} className="px-6 pb-6">
                                 <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-4">
                                   <div className="flex items-center justify-between mb-4">
                                     <h3 className="text-sm font-semibold text-slate-900">Sucursales</h3>
@@ -1170,13 +1204,22 @@ export default function SuperAdminBanksPage() {
                                                 {branch.activo === false ? 'Inactiva' : 'Activa'}
                                               </td>
                                               <td className="px-4 py-3 text-right">
-                                                <button
-                                                  type="button"
-                                                  className="text-xs font-bold text-primary hover:underline"
-                                                  onClick={() => startEditBranch(bank.id, branch)}
-                                                >
-                                                  Editar
-                                                </button>
+                                                <div className="flex items-center justify-end gap-3">
+                                                  <button
+                                                    type="button"
+                                                    className="text-xs font-bold text-primary hover:underline"
+                                                    onClick={() => startEditBranch(bank.id, branch)}
+                                                  >
+                                                    Editar
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    className="text-xs font-bold text-rose-600 hover:underline"
+                                                    onClick={() => onDeleteBranch(bank.id, branch)}
+                                                  >
+                                                    Eliminar
+                                                  </button>
+                                                </div>
                                               </td>
                                             </tr>
                                           ))}
@@ -1538,171 +1581,175 @@ export default function SuperAdminBanksPage() {
         </form>
       </Modal>
 
-      <Modal open={showBranchModal} title="Crear sucursal" onClose={() => setShowBranchModal(false)}>
-        <form onSubmit={onCreateBranch} className="space-y-4">
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Banco</label>
-            <select
-              className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-              value={selectedBankId}
-              onChange={(event) => setSelectedBankId(event.target.value)}
-              required
-            >
-              {banks.map((bank) => (
-                <option key={bank.id} value={bank.id}>
-                  {bank.nombre} - {bank.slug}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Nombre</label>
-              <input
-                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                value={branchNombre}
-                onChange={(event) => setBranchNombre(event.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Codigo</label>
-              <input
-                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                value={branchCodigo}
-                onChange={(event) => setBranchCodigo(event.target.value)}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Localidad</label>
-              <input
-                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                value={branchLocalidad}
-                onChange={(event) => setBranchLocalidad(event.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Region</label>
-              <input
-                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                value={branchRegion}
-                onChange={(event) => setBranchRegion(event.target.value)}
-              />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Tipo</label>
-            <input
-              className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-              value={branchTipo}
-              onChange={(event) => setBranchTipo(event.target.value)}
-            />
-          </div>
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-              Direccion
-            </label>
-            <input
-              className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-              value={branchDireccion}
-              onChange={(event) => setBranchDireccion(event.target.value)}
-              placeholder="Calle 123, Ciudad"
-            />
-          </div>
-          <button
-            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-300"
-            type="submit"
-            disabled={branchSaving}
-          >
-            {branchSaving ? 'Creando...' : 'Crear sucursal'}
-          </button>
-        </form>
-      </Modal>
-
-      <Modal open={showEditBranchModal} title="Editar sucursal" onClose={() => setShowEditBranchModal(false)}>
-        <form onSubmit={onUpdateBranch} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Nombre</label>
-              <input
-                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                value={branchNombre}
-                onChange={(event) => setBranchNombre(event.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Codigo</label>
-              <input
-                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                value={branchCodigo}
-                onChange={(event) => setBranchCodigo(event.target.value)}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Localidad</label>
-              <input
-                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                value={branchLocalidad}
-                onChange={(event) => setBranchLocalidad(event.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Region</label>
-              <input
-                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                value={branchRegion}
-                onChange={(event) => setBranchRegion(event.target.value)}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Tipo</label>
-              <input
-                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                value={branchTipo}
-                onChange={(event) => setBranchTipo(event.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-                Direccion
-              </label>
-              <input
-                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                value={branchDireccion}
-                onChange={(event) => setBranchDireccion(event.target.value)}
-                placeholder="Calle 123, Ciudad"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Estado</label>
-              <select
-                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                value={branchActivo ? 'active' : 'inactive'}
-                onChange={(event) => setBranchActivo(event.target.value === 'active')}
+      {showBranchControls ? (
+        <>
+          <Modal open={showBranchModal} title="Crear sucursal" onClose={() => setShowBranchModal(false)}>
+            <form onSubmit={onCreateBranch} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Banco</label>
+                <select
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                  value={selectedBankId}
+                  onChange={(event) => setSelectedBankId(event.target.value)}
+                  required
+                >
+                  {banks.map((bank) => (
+                    <option key={bank.id} value={bank.id}>
+                      {bank.nombre} - {bank.slug}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Nombre</label>
+                  <input
+                    className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                    value={branchNombre}
+                    onChange={(event) => setBranchNombre(event.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Codigo</label>
+                  <input
+                    className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                    value={branchCodigo}
+                    onChange={(event) => setBranchCodigo(event.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Localidad</label>
+                  <input
+                    className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                    value={branchLocalidad}
+                    onChange={(event) => setBranchLocalidad(event.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Region</label>
+                  <input
+                    className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                    value={branchRegion}
+                    onChange={(event) => setBranchRegion(event.target.value)}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Tipo</label>
+                <input
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                  value={branchTipo}
+                  onChange={(event) => setBranchTipo(event.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                  Direccion
+                </label>
+                <input
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                  value={branchDireccion}
+                  onChange={(event) => setBranchDireccion(event.target.value)}
+                  placeholder="Calle 123, Ciudad"
+                />
+              </div>
+              <button
+                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-300"
+                type="submit"
+                disabled={branchSaving}
               >
-                <option value="active">Activa</option>
-                <option value="inactive">Inactiva</option>
-              </select>
-            </div>
-          </div>
-          <button
-            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-300"
-            type="submit"
-            disabled={branchSaving}
-          >
-            {branchSaving ? 'Guardando...' : 'Guardar cambios'}
-          </button>
-        </form>
-      </Modal>
+                {branchSaving ? 'Creando...' : 'Crear sucursal'}
+              </button>
+            </form>
+          </Modal>
+
+          <Modal open={showEditBranchModal} title="Editar sucursal" onClose={() => setShowEditBranchModal(false)}>
+            <form onSubmit={onUpdateBranch} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Nombre</label>
+                  <input
+                    className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                    value={branchNombre}
+                    onChange={(event) => setBranchNombre(event.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Codigo</label>
+                  <input
+                    className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                    value={branchCodigo}
+                    onChange={(event) => setBranchCodigo(event.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Localidad</label>
+                  <input
+                    className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                    value={branchLocalidad}
+                    onChange={(event) => setBranchLocalidad(event.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Region</label>
+                  <input
+                    className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                    value={branchRegion}
+                    onChange={(event) => setBranchRegion(event.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Tipo</label>
+                  <input
+                    className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                    value={branchTipo}
+                    onChange={(event) => setBranchTipo(event.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                    Direccion
+                  </label>
+                  <input
+                    className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                    value={branchDireccion}
+                    onChange={(event) => setBranchDireccion(event.target.value)}
+                    placeholder="Calle 123, Ciudad"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Estado</label>
+                  <select
+                    className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                    value={branchActivo ? 'active' : 'inactive'}
+                    onChange={(event) => setBranchActivo(event.target.value === 'active')}
+                  >
+                    <option value="active">Activa</option>
+                    <option value="inactive">Inactiva</option>
+                  </select>
+                </div>
+              </div>
+              <button
+                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-300"
+                type="submit"
+                disabled={branchSaving}
+              >
+                {branchSaving ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </form>
+          </Modal>
+        </>
+      ) : null}
 
       <Modal
         open={showProvisionModal}

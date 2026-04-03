@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { CreateBankBranchDto } from './dto/create-bank-branch.dto';
 import { UpdateBankBranchDto } from './dto/update-bank-branch.dto';
@@ -49,5 +49,31 @@ export class BankBranchesService {
         activo: dto.activo ?? undefined,
       },
     });
+  }
+
+  async remove(bankId: string, id: string) {
+    const branch = await this.prisma.bankBranch.findFirst({
+      where: { id, bankId },
+      select: { id: true },
+    });
+    if (!branch) {
+      throw new NotFoundException('Sucursal no encontrada');
+    }
+
+    const assignedUsers = await this.prisma.user.count({
+      where: {
+        tenantId: bankId,
+        bankBranchId: id,
+      },
+    });
+
+    if (assignedUsers > 0) {
+      throw new BadRequestException(
+        'No se puede eliminar la sucursal porque tiene usuarios asociados. Reasignalos o desactiva la sucursal.',
+      );
+    }
+
+    await this.prisma.bankBranch.delete({ where: { id } });
+    return { ok: true };
   }
 }

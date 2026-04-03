@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { BankBranchesService } from './bank-branches.service';
 import { JwtAuthGuard } from '../common/jwt-auth.guard';
 import { RolesGuard } from '../common/roles.guard';
@@ -14,7 +14,7 @@ export class BankBranchesController {
   constructor(private bankBranchesService: BankBranchesService) {}
 
   @Get()
-  @Roles(Role.BANK_ADMIN, Role.BANK_OPS, Role.BANK_BRANCH_MANAGER)
+  @Roles(Role.SUPERADMIN, Role.BANK_ADMIN, Role.BANK_OPS, Role.BANK_BRANCH_MANAGER)
   async list(
     @CurrentUser() user: { tenantId: string; role: Role },
     @Query('bankId') bankId?: string,
@@ -24,7 +24,7 @@ export class BankBranchesController {
   }
 
   @Post()
-  @Roles(Role.BANK_ADMIN)
+  @Roles(Role.SUPERADMIN, Role.BANK_ADMIN)
   async create(
     @Body() dto: CreateBankBranchDto,
     @CurrentUser() user: { tenantId: string; role: Role },
@@ -35,7 +35,7 @@ export class BankBranchesController {
   }
 
   @Patch(':id')
-  @Roles(Role.BANK_ADMIN)
+  @Roles(Role.SUPERADMIN, Role.BANK_ADMIN)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateBankBranchDto,
@@ -44,5 +44,16 @@ export class BankBranchesController {
   ) {
     const resolvedBankId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
     return this.bankBranchesService.update(resolvedBankId, id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(Role.SUPERADMIN, Role.BANK_ADMIN)
+  async remove(
+    @Param('id') id: string,
+    @CurrentUser() user: { tenantId: string; role: Role },
+    @Query('bankId') bankId?: string,
+  ) {
+    const resolvedBankId = user.role === Role.SUPERADMIN && bankId ? bankId : user.tenantId;
+    return this.bankBranchesService.remove(resolvedBankId, id);
   }
 }
