@@ -68,7 +68,15 @@ export default function BankBranchesPage() {
   const [direccion, setDireccion] = useState('');
   const [activo, setActivo] = useState(true);
 
+  const canView =
+    role === 'SUPERADMIN' ||
+    role === 'BANK_ADMIN' ||
+    role === 'BANK_OPS' ||
+    role === 'BANK_APPROVER' ||
+    role === 'BANK_BRANCH_MANAGER' ||
+    role === 'BANK_BRANCH_OPERATOR';
   const canManage = role === 'BANK_ADMIN' || role === 'SUPERADMIN';
+  const columnCount = canManage ? 6 : 5;
 
   useEffect(() => {
     if (!getToken()) {
@@ -99,9 +107,9 @@ export default function BankBranchesPage() {
   };
 
   useEffect(() => {
-    if (!canManage) return;
+    if (!canView) return;
     void loadBranches();
-  }, [canManage]);
+  }, [canView]);
 
   useEffect(() => {
     if (page > 1 && (page - 1) * pageSize >= branches.length) {
@@ -230,7 +238,7 @@ export default function BankBranchesPage() {
       </header>
 
       <div className="pt-24 px-8 pb-12 space-y-6">
-        {!canManage ? (
+        {!canView ? (
           <div className="text-sm text-error bg-error-container/30 px-4 py-3 rounded-xl">
             No tienes permisos para acceder a esta seccion.
           </div>
@@ -271,20 +279,24 @@ export default function BankBranchesPage() {
                       <th className="px-4 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Localidad</th>
                       <th className="px-4 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Direccion</th>
                       <th className="px-4 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Estado</th>
-                      <th className="px-4 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant text-right">Acciones</th>
+                      {canManage ? (
+                        <th className="px-4 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant text-right">
+                          Acciones
+                        </th>
+                      ) : null}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {loading ? (
                       <tr>
-                        <td className="px-4 py-6 text-sm text-on-surface-variant" colSpan={6}>
+                        <td className="px-4 py-6 text-sm text-on-surface-variant" colSpan={columnCount}>
                           Cargando sucursales...
                         </td>
                       </tr>
                     ) : null}
                     {!loading && paginatedBranches.length === 0 ? (
                       <tr>
-                        <td className="px-4 py-6 text-sm text-on-surface-variant" colSpan={6}>
+                        <td className="px-4 py-6 text-sm text-on-surface-variant" colSpan={columnCount}>
                           No hay sucursales cargadas.
                         </td>
                       </tr>
@@ -296,24 +308,26 @@ export default function BankBranchesPage() {
                         <td className="px-4 py-3 text-sm text-on-surface-variant">{branch.localidad || '-'}</td>
                         <td className="px-4 py-3 text-sm text-on-surface-variant">{branch.direccion || '-'}</td>
                         <td className="px-4 py-3 text-sm text-on-surface-variant">{branch.activo === false ? 'Inactiva' : 'Activa'}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-3">
-                            <button
-                              type="button"
-                              className="text-xs font-bold text-primary hover:underline"
-                              onClick={() => startEdit(branch)}
-                            >
-                              Editar
-                            </button>
-                            <button
-                              type="button"
-                              className="text-xs font-bold text-rose-600 hover:underline"
-                              onClick={() => onDelete(branch)}
-                            >
-                              Eliminar
-                            </button>
-                          </div>
-                        </td>
+                        {canManage ? (
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-3">
+                              <button
+                                type="button"
+                                className="text-xs font-bold text-primary hover:underline"
+                                onClick={() => startEdit(branch)}
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                className="text-xs font-bold text-rose-600 hover:underline"
+                                onClick={() => onDelete(branch)}
+                              >
+                                Eliminar
+                              </button>
+                            </div>
+                          </td>
+                        ) : null}
                       </tr>
                     ))}
                   </tbody>

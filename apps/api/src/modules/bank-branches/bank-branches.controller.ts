@@ -14,7 +14,14 @@ export class BankBranchesController {
   constructor(private bankBranchesService: BankBranchesService) {}
 
   @Get()
-  @Roles(Role.SUPERADMIN, Role.BANK_ADMIN, Role.BANK_OPS, Role.BANK_BRANCH_MANAGER)
+  @Roles(
+    Role.SUPERADMIN,
+    Role.BANK_ADMIN,
+    Role.BANK_OPS,
+    Role.BANK_APPROVER,
+    Role.BANK_BRANCH_MANAGER,
+    Role.BANK_BRANCH_OPERATOR,
+  )
   async list(
     @CurrentUser() user: { tenantId: string; role: Role },
     @Query('bankId') bankId?: string,

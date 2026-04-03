@@ -84,6 +84,7 @@ docker ps
 
 ## Arquitectura objetivo (diseno)
 - Ver `docs/ARCHITECTURE_CENTRAL_BANK.md`.
+- Operacion GitHub/VPS para agentes: `docs/HANDBOOK_OPERATIVO_GITHUB_VPS.md`.
 
 ## Endpoints principales (API)
 - Auth

@@ -38,8 +38,19 @@ const centralSuperAdminItems: NavItem[] = [
 
 const bankAdminItems: NavItem[] = [
   { href: '/bank/users', label: 'Usuarios', icon: 'group' },
+];
+
+const bankBranchItems: NavItem[] = [
   { href: '/bank/branches', label: 'Sucursales', icon: 'store' },
 ];
+
+const bankBranchViewerRoles = new Set([
+  'BANK_ADMIN',
+  'BANK_OPS',
+  'BANK_APPROVER',
+  'BANK_BRANCH_MANAGER',
+  'BANK_BRANCH_OPERATOR',
+]);
 
 const footerItems: NavItem[] = [
   { href: '#', label: 'Configuracion', icon: 'settings' },
@@ -100,8 +111,14 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     if (useCentralSuperAdminMenu) {
       return centralSuperAdminItems;
     }
-    if (userRole === 'BANK_ADMIN' || (userRole === 'SUPERADMIN' && !isCentralHost)) {
-      return [...baseItems, ...bankAdminItems];
+    if (userRole === 'SUPERADMIN' && !isCentralHost) {
+      return [...baseItems, ...bankAdminItems, ...bankBranchItems];
+    }
+    if (userRole === 'BANK_ADMIN') {
+      return [...baseItems, ...bankAdminItems, ...bankBranchItems];
+    }
+    if (userRole && bankBranchViewerRoles.has(userRole)) {
+      return [...baseItems, ...bankBranchItems];
     }
     return baseItems;
   }, [useCentralSuperAdminMenu, userRole, isCentralHost]);
