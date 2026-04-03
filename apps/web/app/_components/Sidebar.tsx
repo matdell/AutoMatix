@@ -36,6 +36,11 @@ const centralSuperAdminItems: NavItem[] = [
   { href: '/perfil', label: 'Perfil', icon: 'account_circle' },
 ];
 
+const bankAdminItems: NavItem[] = [
+  { href: '/bank/users', label: 'Usuarios', icon: 'group' },
+  { href: '/bank/branches', label: 'Sucursales', icon: 'store' },
+];
+
 const footerItems: NavItem[] = [
   { href: '#', label: 'Configuracion', icon: 'settings' },
   { href: '#', label: 'Soporte', icon: 'contact_support' },
@@ -95,8 +100,11 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     if (useCentralSuperAdminMenu) {
       return centralSuperAdminItems;
     }
+    if (userRole === 'BANK_ADMIN' || (userRole === 'SUPERADMIN' && !isCentralHost)) {
+      return [...baseItems, ...bankAdminItems];
+    }
     return baseItems;
-  }, [useCentralSuperAdminMenu]);
+  }, [useCentralSuperAdminMenu, userRole, isCentralHost]);
 
   const isActive = (href: string) => {
     if (!href || href === '#') return false;
