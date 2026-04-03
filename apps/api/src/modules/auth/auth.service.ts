@@ -293,6 +293,18 @@ export class AuthService {
         throw new ForbiddenException('No autorizado para crear usuarios fuera de la sucursal bancaria');
       }
     }
+    if (actorRole === Role.BANK_ADMIN) {
+      const allowed = new Set<Role>([
+        Role.BANK_ADMIN,
+        Role.BANK_OPS,
+        Role.BANK_APPROVER,
+        Role.BANK_BRANCH_MANAGER,
+        Role.BANK_BRANCH_OPERATOR,
+      ]);
+      if (!allowed.has(dto.role)) {
+        throw new ForbiddenException('No autorizado para crear usuarios fuera del banco/sucursales');
+      }
+    }
     if (actorRole === Role.BRAND_ADMIN) {
       const allowed = new Set<Role>([Role.BRAND_ADMIN, Role.LEGAL_ENTITY_ADMIN, Role.POS_ADMIN, Role.MERCHANT_ADMIN, Role.MERCHANT_USER]);
       if (!allowed.has(dto.role)) {

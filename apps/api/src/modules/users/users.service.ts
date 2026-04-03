@@ -9,6 +9,27 @@ const bankBranchRoles = new Set<Role>([Role.BANK_BRANCH_MANAGER, Role.BANK_BRANC
 const brandRoles = new Set<Role>([Role.BRAND_ADMIN]);
 const legalEntityRoles = new Set<Role>([Role.LEGAL_ENTITY_ADMIN, Role.MERCHANT_ADMIN, Role.MERCHANT_USER]);
 const pointOfSaleRoles = new Set<Role>([Role.POS_ADMIN]);
+const bankAdminAssignableRoles = new Set<Role>([
+  Role.BANK_ADMIN,
+  Role.BANK_OPS,
+  Role.BANK_APPROVER,
+  Role.BANK_BRANCH_MANAGER,
+  Role.BANK_BRANCH_OPERATOR,
+]);
+const bankBranchManagerAssignableRoles = new Set<Role>([Role.BANK_BRANCH_MANAGER, Role.BANK_BRANCH_OPERATOR]);
+const brandAdminAssignableRoles = new Set<Role>([
+  Role.BRAND_ADMIN,
+  Role.LEGAL_ENTITY_ADMIN,
+  Role.POS_ADMIN,
+  Role.MERCHANT_ADMIN,
+  Role.MERCHANT_USER,
+]);
+const legalEntityAssignableRoles = new Set<Role>([
+  Role.LEGAL_ENTITY_ADMIN,
+  Role.POS_ADMIN,
+  Role.MERCHANT_ADMIN,
+  Role.MERCHANT_USER,
+]);
 const bankWideRoles = new Set<Role>([
   Role.SUPERADMIN,
   Role.BANK_ADMIN,
@@ -21,6 +42,49 @@ const bankWideRoles = new Set<Role>([
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService, private audit: AuditService) {}
+
+  private assertRoleAssignmentAllowed(actorRole: Role, targetRole: Role) {
+    if (actorRole === Role.SUPERADMIN) {
+      return;
+    }
+
+    if (actorRole === Role.BANK_ADMIN) {
+      if (!bankAdminAssignableRoles.has(targetRole)) {
+        throw new ForbiddenException('No autorizado para asignar este rol');
+      }
+      return;
+    }
+
+    if (actorRole === Role.BANK_BRANCH_MANAGER) {
+      if (!bankBranchManagerAssignableRoles.has(targetRole)) {
+        throw new ForbiddenException('No autorizado para asignar este rol');
+      }
+      return;
+    }
+
+    if (actorRole === Role.BRAND_ADMIN) {
+      if (!brandAdminAssignableRoles.has(targetRole)) {
+        throw new ForbiddenException('No autorizado para asignar este rol');
+      }
+      return;
+    }
+
+    if (actorRole === Role.LEGAL_ENTITY_ADMIN || actorRole === Role.MERCHANT_ADMIN) {
+      if (!legalEntityAssignableRoles.has(targetRole)) {
+        throw new ForbiddenException('No autorizado para asignar este rol');
+      }
+      return;
+    }
+
+    if (actorRole === Role.POS_ADMIN) {
+      if (targetRole !== Role.POS_ADMIN) {
+        throw new ForbiddenException('No autorizado para asignar este rol');
+      }
+      return;
+    }
+
+    throw new ForbiddenException('No autorizado para modificar usuarios');
+  }
 
   private async buildScopeWhere(
     tenantId: string,
@@ -210,9 +274,11 @@ export class UsersService {
     actorId?: string,
     actorRole?: Role,
   ) {
-    if (dto.role === Role.SUPERADMIN && actorRole !== Role.SUPERADMIN) {
-      throw new ForbiddenException('No autorizado para asignar SuperAdmin');
+    const before = await this.prisma.user.findFirst({ where: { tenantId, id } });
+    if (!before) {
+      throw new NotFoundException('Usuario no encontrado');
     }
+
     if (
       actorScope &&
       (!bankWideRoles.has(actorScope.role) || (actorScope.role === Role.SUPERADMIN && isCentralPlatformMode()))
@@ -226,20 +292,34 @@ export class UsersService {
         throw new ForbiddenException('No autorizado para editar este usuario');
       }
     }
-    const before = await this.prisma.user.findFirst({ where: { tenantId, id } });
-    if (!before) {
-      throw new NotFoundException('Usuario no encontrado');
+
+    const effectiveRole = dto.role ?? before.role;
+    if (effectiveRole === Role.SUPERADMIN && actorRole !== Role.SUPERADMIN) {
+      throw new ForbiddenException('No autorizado para asignar SuperAdmin');
     }
+    if (actorRole && actorRole !== Role.SUPERADMIN) {
+      this.assertRoleAssignmentAllowed(actorRole, effectiveRole);
+      this.assertRoleAssignmentAllowed(actorRole, before.role);
+    }
+
     const normalizedBankBranchId = dto.bankBranchId === '' ? null : dto.bankBranchId;
     const normalizedBrandId = dto.brandId === '' ? null : dto.brandId;
     const normalizedMerchantId = dto.merchantId === '' ? null : dto.merchantId;
     const normalizedPointOfSaleId = dto.pointOfSaleId === '' ? null : dto.pointOfSaleId;
 
-    const effectiveRole = dto.role ?? before.role;
     const isBranchRole = bankBranchRoles.has(effectiveRole);
     const isBrandRole = brandRoles.has(effectiveRole);
     const isLegalEntityRole = legalEntityRoles.has(effectiveRole);
     const isPointOfSaleRole = pointOfSaleRoles.has(effectiveRole);
+
+    if (actorScope?.role === Role.BANK_BRANCH_MANAGER) {
+      if (!actorScope.bankBranchId) {
+        throw new ForbiddenException('Sucursal bancaria no configurada para el usuario');
+      }
+      if (normalizedBankBranchId && normalizedBankBranchId !== actorScope.bankBranchId) {
+        throw new ForbiddenException('No autorizado para asignar otra sucursal bancaria');
+      }
+    }
 
     if (isBranchRole) {
       const branchId = normalizedBankBranchId ?? before.bankBranchId;
@@ -420,6 +500,10 @@ export class UsersService {
     },
     actorId?: string,
   ) {
+    const before = await this.prisma.user.findFirst({ where: { tenantId, id } });
+    if (!before) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
     if (
       actorScope &&
       (!bankWideRoles.has(actorScope.role) || (actorScope.role === Role.SUPERADMIN && isCentralPlatformMode()))
@@ -433,9 +517,8 @@ export class UsersService {
         throw new ForbiddenException('No autorizado para desactivar este usuario');
       }
     }
-    const before = await this.prisma.user.findFirst({ where: { tenantId, id } });
-    if (!before) {
-      throw new NotFoundException('Usuario no encontrado');
+    if (actorScope && actorScope.role !== Role.SUPERADMIN) {
+      this.assertRoleAssignmentAllowed(actorScope.role, before.role);
     }
     const updated = await this.prisma.user.update({
       where: { id },

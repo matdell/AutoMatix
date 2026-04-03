@@ -71,10 +71,20 @@ const roleOptions = [
 ];
 
 const branchRoles = new Set(['BANK_BRANCH_MANAGER', 'BANK_BRANCH_OPERATOR']);
+const bankViewerRoles = new Set([
+  'SUPERADMIN',
+  'BANK_ADMIN',
+  'BANK_OPS',
+  'BANK_APPROVER',
+  'BANK_BRANCH_MANAGER',
+  'BANK_BRANCH_OPERATOR',
+]);
+const branchManagerRoleOptions = ['BANK_BRANCH_MANAGER', 'BANK_BRANCH_OPERATOR'];
 
 export default function BankUsersPage() {
   const router = useRouter();
   const [role, setRole] = useState<string | null>(null);
+  const [actorBankBranchId, setActorBankBranchId] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [branches, setBranches] = useState<BankBranch[]>([]);
   const [loading, setLoading] = useState(false);
@@ -96,8 +106,12 @@ export default function BankUsersPage() {
   const [bankBranchId, setBankBranchId] = useState('');
   const [isActive, setIsActive] = useState(true);
 
-  const canManage = role === 'BANK_ADMIN' || role === 'SUPERADMIN';
+  const canView = role ? bankViewerRoles.has(role) : false;
+  const managesOnlyBranch = role === 'BANK_BRANCH_MANAGER';
+  const canManage = role === 'BANK_ADMIN' || role === 'SUPERADMIN' || managesOnlyBranch;
+  const availableRoleOptions = managesOnlyBranch ? branchManagerRoleOptions : roleOptions;
   const needsBranch = branchRoles.has(userRole);
+  const columnCount = canManage ? 7 : 6;
 
   const dateTimeFormatter = useMemo(
     () =>
@@ -118,8 +132,10 @@ export default function BankUsersPage() {
     try {
       const parsed = JSON.parse(raw);
       setRole(parsed?.role ?? null);
+      setActorBankBranchId(parsed?.bankBranchId ?? null);
     } catch {
       setRole(null);
+      setActorBankBranchId(null);
     }
   }, [router]);
 
@@ -146,16 +162,30 @@ export default function BankUsersPage() {
   };
 
   useEffect(() => {
-    if (!canManage) return;
+    if (!canView) return;
     void loadUsers();
-    void loadBranches();
-  }, [canManage]);
+    if (canManage) {
+      void loadBranches();
+    }
+  }, [canView, canManage]);
 
   useEffect(() => {
     if (page > 1 && (page - 1) * pageSize >= users.length) {
       setPage(1);
     }
   }, [users.length, page, pageSize]);
+
+  useEffect(() => {
+    if (!managesOnlyBranch) {
+      return;
+    }
+    if (!userRole || !branchRoles.has(userRole)) {
+      setUserRole('BANK_BRANCH_OPERATOR');
+    }
+    if (actorBankBranchId) {
+      setBankBranchId(actorBankBranchId);
+    }
+  }, [actorBankBranchId, managesOnlyBranch, userRole]);
 
   const paginatedUsers = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -168,8 +198,8 @@ export default function BankUsersPage() {
     setNombre('');
     setEmail('');
     setPassword('');
-    setUserRole('BANK_OPS');
-    setBankBranchId('');
+    setUserRole(managesOnlyBranch ? 'BANK_BRANCH_OPERATOR' : 'BANK_OPS');
+    setBankBranchId(managesOnlyBranch ? actorBankBranchId || '' : '');
     setIsActive(true);
     setEditingUser(null);
   };
@@ -180,6 +210,14 @@ export default function BankUsersPage() {
     setError(null);
     setSuccess(null);
     try {
+      const resolvedBranchId = needsBranch
+        ? managesOnlyBranch
+          ? actorBankBranchId || undefined
+          : bankBranchId || undefined
+        : undefined;
+      if (needsBranch && !resolvedBranchId) {
+        throw new Error('Sucursal requerida para el rol seleccionado');
+      }
       await apiJson('/auth/registro', {
         method: 'POST',
         body: JSON.stringify({
@@ -187,7 +225,7 @@ export default function BankUsersPage() {
           email: email.trim(),
           password,
           role: userRole,
-          bankBranchId: needsBranch ? bankBranchId || undefined : undefined,
+          bankBranchId: resolvedBranchId,
         }),
       });
       setSuccess('Usuario creado.');
@@ -202,12 +240,16 @@ export default function BankUsersPage() {
   };
 
   const startEdit = (user: User) => {
+    if (managesOnlyBranch && !branchRoles.has(user.role)) {
+      setError('Solo puedes editar usuarios de sucursal.');
+      return;
+    }
     setEditingUser(user);
     setNombre(user.nombre || '');
     setEmail(user.email || '');
     setPassword('');
-    setUserRole(user.role || 'BANK_OPS');
-    setBankBranchId(user.bankBranchId || '');
+    setUserRole(user.role || (managesOnlyBranch ? 'BANK_BRANCH_OPERATOR' : 'BANK_OPS'));
+    setBankBranchId(managesOnlyBranch ? actorBankBranchId || user.bankBranchId || '' : user.bankBranchId || '');
     setIsActive(Boolean(user.isActive));
     setShowEditModal(true);
   };
@@ -219,6 +261,14 @@ export default function BankUsersPage() {
     setError(null);
     setSuccess(null);
     try {
+      const resolvedBranchId = needsBranch
+        ? managesOnlyBranch
+          ? actorBankBranchId || undefined
+          : bankBranchId || undefined
+        : '';
+      if (needsBranch && !resolvedBranchId) {
+        throw new Error('Sucursal requerida para el rol seleccionado');
+      }
       await apiJson(`/users/${editingUser.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
@@ -226,7 +276,7 @@ export default function BankUsersPage() {
           email: email.trim(),
           role: userRole,
           isActive,
-          bankBranchId: needsBranch ? bankBranchId || undefined : '',
+          bankBranchId: resolvedBranchId,
         }),
       });
       setSuccess('Usuario actualizado.');
@@ -273,7 +323,7 @@ export default function BankUsersPage() {
       </header>
 
       <div className="pt-24 px-8 pb-12 space-y-6">
-        {!canManage ? (
+        {!canView ? (
           <div className="text-sm text-error bg-error-container/30 px-4 py-3 rounded-xl">
             No tienes permisos para acceder a esta seccion.
           </div>
@@ -315,20 +365,24 @@ export default function BankUsersPage() {
                       <th className="px-4 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Sucursal</th>
                       <th className="px-4 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Ultimo acceso</th>
                       <th className="px-4 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Estado</th>
-                      <th className="px-4 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant text-right">Acciones</th>
+                      {canManage ? (
+                        <th className="px-4 py-4 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant text-right">
+                          Acciones
+                        </th>
+                      ) : null}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {loading ? (
                       <tr>
-                        <td className="px-4 py-6 text-sm text-on-surface-variant" colSpan={7}>
+                        <td className="px-4 py-6 text-sm text-on-surface-variant" colSpan={columnCount}>
                           Cargando usuarios...
                         </td>
                       </tr>
                     ) : null}
                     {!loading && paginatedUsers.length === 0 ? (
                       <tr>
-                        <td className="px-4 py-6 text-sm text-on-surface-variant" colSpan={7}>
+                        <td className="px-4 py-6 text-sm text-on-surface-variant" colSpan={columnCount}>
                           No hay usuarios cargados.
                         </td>
                       </tr>
@@ -343,26 +397,28 @@ export default function BankUsersPage() {
                           {user.lastLoginAt ? dateTimeFormatter.format(new Date(user.lastLoginAt)) : '-'}
                         </td>
                         <td className="px-4 py-3 text-sm text-on-surface-variant">{user.isActive ? 'Activo' : 'Inactivo'}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-3">
-                            <button
-                              type="button"
-                              className="text-xs font-bold text-primary hover:underline"
-                              onClick={() => startEdit(user)}
-                            >
-                              Editar
-                            </button>
-                            {user.isActive ? (
+                        {canManage ? (
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-3">
                               <button
                                 type="button"
-                                className="text-xs font-bold text-rose-600 hover:underline"
-                                onClick={() => onDeactivate(user)}
+                                className="text-xs font-bold text-primary hover:underline"
+                                onClick={() => startEdit(user)}
                               >
-                                Desactivar
+                                Editar
                               </button>
-                            ) : null}
-                          </div>
-                        </td>
+                              {user.isActive ? (
+                                <button
+                                  type="button"
+                                  className="text-xs font-bold text-rose-600 hover:underline"
+                                  onClick={() => onDeactivate(user)}
+                                >
+                                  Desactivar
+                                </button>
+                              ) : null}
+                            </div>
+                          </td>
+                        ) : null}
                       </tr>
                     ))}
                   </tbody>
@@ -438,7 +494,7 @@ export default function BankUsersPage() {
                 value={userRole}
                 onChange={(event) => setUserRole(event.target.value)}
               >
-                {roleOptions.map((option) => (
+                {availableRoleOptions.map((option) => (
                   <option key={option} value={option}>
                     {roleLabels[option] || option}
                   </option>
@@ -449,21 +505,29 @@ export default function BankUsersPage() {
           {needsBranch ? (
             <div>
               <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Sucursal</label>
-              <select
-                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                value={bankBranchId}
-                onChange={(event) => setBankBranchId(event.target.value)}
-                required
-              >
-                <option value="">Selecciona una sucursal</option>
-                {branches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.nombre}
-                    {branch.localidad ? ` - ${branch.localidad}` : ''}
-                    {branch.codigo ? ` - ${branch.codigo}` : ''}
-                  </option>
-                ))}
-              </select>
+              {managesOnlyBranch ? (
+                <input
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm text-on-surface-variant"
+                  value={branches.find((branch) => branch.id === (actorBankBranchId || bankBranchId))?.nombre || 'Sucursal asignada'}
+                  readOnly
+                />
+              ) : (
+                <select
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                  value={bankBranchId}
+                  onChange={(event) => setBankBranchId(event.target.value)}
+                  required
+                >
+                  <option value="">Selecciona una sucursal</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.nombre}
+                      {branch.localidad ? ` - ${branch.localidad}` : ''}
+                      {branch.codigo ? ` - ${branch.codigo}` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           ) : null}
           <button
@@ -507,7 +571,7 @@ export default function BankUsersPage() {
                 value={userRole}
                 onChange={(event) => setUserRole(event.target.value)}
               >
-                {roleOptions.map((option) => (
+                {availableRoleOptions.map((option) => (
                   <option key={option} value={option}>
                     {roleLabels[option] || option}
                   </option>
@@ -529,21 +593,29 @@ export default function BankUsersPage() {
           {needsBranch ? (
             <div>
               <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Sucursal</label>
-              <select
-                className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                value={bankBranchId}
-                onChange={(event) => setBankBranchId(event.target.value)}
-                required
-              >
-                <option value="">Selecciona una sucursal</option>
-                {branches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.nombre}
-                    {branch.localidad ? ` - ${branch.localidad}` : ''}
-                    {branch.codigo ? ` - ${branch.codigo}` : ''}
-                  </option>
-                ))}
-              </select>
+              {managesOnlyBranch ? (
+                <input
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm text-on-surface-variant"
+                  value={branches.find((branch) => branch.id === (actorBankBranchId || bankBranchId))?.nombre || 'Sucursal asignada'}
+                  readOnly
+                />
+              ) : (
+                <select
+                  className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                  value={bankBranchId}
+                  onChange={(event) => setBankBranchId(event.target.value)}
+                  required
+                >
+                  <option value="">Selecciona una sucursal</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.nombre}
+                      {branch.localidad ? ` - ${branch.localidad}` : ''}
+                      {branch.codigo ? ` - ${branch.codigo}` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           ) : null}
           <button

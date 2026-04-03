@@ -25,15 +25,6 @@ import { isCentralPlatformMode } from '../common/platform-mode';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(
-  Role.SUPERADMIN,
-  Role.BANK_ADMIN,
-  Role.BANK_BRANCH_MANAGER,
-  Role.BRAND_ADMIN,
-  Role.LEGAL_ENTITY_ADMIN,
-  Role.MERCHANT_ADMIN,
-  Role.MERCHANT_USER,
-)
 export class UsersController {
   constructor(private usersService: UsersService) {}
 
@@ -45,6 +36,19 @@ export class UsersController {
   }
 
   @Get()
+  @Roles(
+    Role.SUPERADMIN,
+    Role.BANK_ADMIN,
+    Role.BANK_OPS,
+    Role.BANK_APPROVER,
+    Role.BANK_BRANCH_MANAGER,
+    Role.BANK_BRANCH_OPERATOR,
+    Role.BRAND_ADMIN,
+    Role.LEGAL_ENTITY_ADMIN,
+    Role.MERCHANT_ADMIN,
+    Role.MERCHANT_USER,
+    Role.POS_ADMIN,
+  )
   async list(
     @CurrentUser() user: {
       tenantId: string;
@@ -67,6 +71,19 @@ export class UsersController {
   }
 
   @Get(':id')
+  @Roles(
+    Role.SUPERADMIN,
+    Role.BANK_ADMIN,
+    Role.BANK_OPS,
+    Role.BANK_APPROVER,
+    Role.BANK_BRANCH_MANAGER,
+    Role.BANK_BRANCH_OPERATOR,
+    Role.BRAND_ADMIN,
+    Role.LEGAL_ENTITY_ADMIN,
+    Role.MERCHANT_ADMIN,
+    Role.MERCHANT_USER,
+    Role.POS_ADMIN,
+  )
   async get(
     @Param('id') id: string,
     @CurrentUser() user: {
@@ -90,6 +107,15 @@ export class UsersController {
   }
 
   @Patch(':id')
+  @Roles(
+    Role.SUPERADMIN,
+    Role.BANK_ADMIN,
+    Role.BANK_BRANCH_MANAGER,
+    Role.BRAND_ADMIN,
+    Role.LEGAL_ENTITY_ADMIN,
+    Role.MERCHANT_ADMIN,
+    Role.POS_ADMIN,
+  )
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
@@ -122,6 +148,15 @@ export class UsersController {
   }
 
   @Delete(':id')
+  @Roles(
+    Role.SUPERADMIN,
+    Role.BANK_ADMIN,
+    Role.BANK_BRANCH_MANAGER,
+    Role.BRAND_ADMIN,
+    Role.LEGAL_ENTITY_ADMIN,
+    Role.MERCHANT_ADMIN,
+    Role.POS_ADMIN,
+  )
   async remove(
     @Param('id') id: string,
     @CurrentUser() user: {
@@ -151,6 +186,14 @@ export class UsersController {
   }
 
   @Post('import')
+  @Roles(
+    Role.SUPERADMIN,
+    Role.BANK_ADMIN,
+    Role.BANK_BRANCH_MANAGER,
+    Role.BRAND_ADMIN,
+    Role.LEGAL_ENTITY_ADMIN,
+    Role.MERCHANT_ADMIN,
+  )
   @UseInterceptors(FileInterceptor('file', FILE_INTERCEPTOR_OPTIONS))
   async importCsv(
     @UploadedFile() file: Express.Multer.File,

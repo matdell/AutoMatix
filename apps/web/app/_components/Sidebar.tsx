@@ -44,7 +44,7 @@ const bankBranchItems: NavItem[] = [
   { href: '/bank/branches', label: 'Sucursales', icon: 'store' },
 ];
 
-const bankBranchViewerRoles = new Set([
+const bankUserViewerRoles = new Set([
   'BANK_ADMIN',
   'BANK_OPS',
   'BANK_APPROVER',
@@ -117,8 +117,8 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     if (userRole === 'BANK_ADMIN') {
       return [...baseItems, ...bankAdminItems, ...bankBranchItems];
     }
-    if (userRole && bankBranchViewerRoles.has(userRole)) {
-      return [...baseItems, ...bankBranchItems];
+    if (userRole && bankUserViewerRoles.has(userRole)) {
+      return [...baseItems, ...bankAdminItems, ...bankBranchItems];
     }
     return baseItems;
   }, [useCentralSuperAdminMenu, userRole, isCentralHost]);
