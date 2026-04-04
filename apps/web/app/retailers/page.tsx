@@ -1,9 +1,9 @@
 'use client';
 
-import { FormEvent, Fragment, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, Fragment, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AppShell from '@/app/_components/AppShell';
-import { apiJson, clearToken, getToken } from '@/lib/api';
+import { apiFetch, apiJson, clearToken, getToken } from '@/lib/api';
 
 type Category = {
   id: string;
@@ -18,6 +18,11 @@ type BrandCategory = {
 type Brand = {
   id: string;
   nombre: string;
+  logoUrl?: string | null;
+  sitioWeb?: string | null;
+  facebook?: string | null;
+  instagram?: string | null;
+  twitter?: string | null;
   activo: boolean;
   categories?: BrandCategory[];
 };
@@ -92,6 +97,13 @@ function merchantStatusBadge(status?: string) {
 
 function brandCategoryName(brand?: Brand) {
   return brand?.categories?.[0]?.category?.nombre ?? null;
+}
+
+function normalizeExternalUrl(value?: string | null) {
+  const normalized = value?.trim();
+  if (!normalized) return null;
+  if (/^https?:\/\//i.test(normalized)) return normalized;
+  return `https://${normalized}`;
 }
 
 function buildRetailerRows(merchants: Merchant[], knownBrands: Brand[]) {
@@ -173,6 +185,12 @@ export default function RetailersPage() {
   const [retailerNombre, setRetailerNombre] = useState('');
   const [retailerCategoriaId, setRetailerCategoriaId] = useState('');
   const [retailerActivo, setRetailerActivo] = useState(true);
+  const [retailerLogoUrl, setRetailerLogoUrl] = useState('');
+  const [retailerSitioWeb, setRetailerSitioWeb] = useState('');
+  const [retailerFacebook, setRetailerFacebook] = useState('');
+  const [retailerInstagram, setRetailerInstagram] = useState('');
+  const [retailerTwitter, setRetailerTwitter] = useState('');
+  const [retailerLogoFile, setRetailerLogoFile] = useState<File | null>(null);
 
   const canView =
     role === 'SUPERADMIN' ||
@@ -305,6 +323,12 @@ export default function RetailersPage() {
     setRetailerNombre('');
     setRetailerCategoriaId('');
     setRetailerActivo(true);
+    setRetailerLogoUrl('');
+    setRetailerSitioWeb('');
+    setRetailerFacebook('');
+    setRetailerInstagram('');
+    setRetailerTwitter('');
+    setRetailerLogoFile(null);
     setEditingRetailerId(null);
   };
 
@@ -318,6 +342,12 @@ export default function RetailersPage() {
     setEditingRetailerId(row.id);
     setRetailerNombre(row.nombre);
     setRetailerActivo(row.activo);
+    setRetailerLogoUrl(brand?.logoUrl ?? '');
+    setRetailerSitioWeb(brand?.sitioWeb ?? '');
+    setRetailerFacebook(brand?.facebook ?? '');
+    setRetailerInstagram(brand?.instagram ?? '');
+    setRetailerTwitter(brand?.twitter ?? '');
+    setRetailerLogoFile(null);
 
     if (brand?.categories?.[0]?.category?.nombre) {
       const match = categories.find(
@@ -329,6 +359,39 @@ export default function RetailersPage() {
     }
 
     setShowEditModal(true);
+  };
+
+  const parseApiError = async (response: Response, fallback: string) => {
+    let message = fallback;
+    try {
+      const body = await response.json();
+      if (Array.isArray(body?.message)) {
+        message = body.message.join(', ');
+      } else if (typeof body?.message === 'string') {
+        message = body.message;
+      }
+    } catch {
+      // noop
+    }
+    return message;
+  };
+
+  const uploadRetailerLogo = async (retailerId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await apiFetch(`/brands/${retailerId}/logo`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) {
+      const message = await parseApiError(response, 'No se pudo subir el logo del retailer');
+      throw new Error(message);
+    }
+  };
+
+  const onRetailerLogoFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setRetailerLogoFile(file);
   };
 
   const saveRetailer = async (event: FormEvent<HTMLFormElement>) => {
@@ -347,21 +410,32 @@ export default function RetailersPage() {
     try {
       const payload = {
         nombre: retailerNombre.trim(),
+        logoUrl: retailerLogoUrl.trim() || undefined,
+        sitioWeb: retailerSitioWeb.trim() || undefined,
+        facebook: retailerFacebook.trim() || undefined,
+        instagram: retailerInstagram.trim() || undefined,
+        twitter: retailerTwitter.trim() || undefined,
         activo: retailerActivo,
         rubros: [category.nombre],
       };
 
       if (showCreateModal) {
-        await apiJson('/brands', {
+        const created = await apiJson<Brand>('/brands', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
+        if (retailerLogoFile) {
+          await uploadRetailerLogo(created.id, retailerLogoFile);
+        }
         setSuccess('Retailer creado correctamente.');
       } else if (showEditModal && editingRetailerId) {
         await apiJson(`/brands/${editingRetailerId}`, {
           method: 'PATCH',
           body: JSON.stringify(payload),
         });
+        if (retailerLogoFile) {
+          await uploadRetailerLogo(editingRetailerId, retailerLogoFile);
+        }
         setSuccess('Retailer actualizado correctamente.');
       }
 
@@ -479,6 +553,11 @@ export default function RetailersPage() {
                     {filteredRetailerRows.map((row) => {
                       const expanded = expandedRetailerId === row.id;
                       const editable = canEditRow(row);
+                      const brand = row.id === '__no_brand__' ? undefined : brandById.get(row.id);
+                      const websiteUrl = normalizeExternalUrl(brand?.sitioWeb);
+                      const facebookUrl = normalizeExternalUrl(brand?.facebook);
+                      const instagramUrl = normalizeExternalUrl(brand?.instagram);
+                      const twitterUrl = normalizeExternalUrl(brand?.twitter);
 
                       return (
                         <Fragment key={row.id}>
@@ -537,8 +616,76 @@ export default function RetailersPage() {
                           {expanded ? (
                             <tr>
                               <td colSpan={canManageRetailers ? 6 : 5} className="px-4 pb-4">
-                                <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-4">
-                                  <div className="mb-3 text-sm font-semibold text-slate-900">Razones sociales vinculadas</div>
+                                <div className="space-y-3">
+                                  {brand ? (
+                                    <div className="rounded-xl border border-slate-200/60 bg-white p-4">
+                                      <div className="mb-3 text-sm font-semibold text-slate-900">Datos del retailer</div>
+                                      <div className="grid gap-4 sm:grid-cols-2">
+                                        <div className="sm:col-span-2">
+                                          <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Logo</div>
+                                          <div className="mt-1 h-16 w-16 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                                            {brand.logoUrl ? (
+                                              // eslint-disable-next-line @next/next/no-img-element
+                                              <img src={brand.logoUrl} alt={`Logo de ${brand.nombre}`} className="h-full w-full object-cover" />
+                                            ) : (
+                                              <div className="flex h-full w-full items-center justify-center text-xs text-slate-400">Sin logo</div>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Sitio web</div>
+                                          <div className="mt-1 text-sm text-slate-700">
+                                            {websiteUrl ? (
+                                              <a href={websiteUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                                                {brand.sitioWeb}
+                                              </a>
+                                            ) : (
+                                              '-'
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Facebook</div>
+                                          <div className="mt-1 text-sm text-slate-700">
+                                            {facebookUrl ? (
+                                              <a href={facebookUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                                                {brand.facebook}
+                                              </a>
+                                            ) : (
+                                              '-'
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Instagram</div>
+                                          <div className="mt-1 text-sm text-slate-700">
+                                            {instagramUrl ? (
+                                              <a href={instagramUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                                                {brand.instagram}
+                                              </a>
+                                            ) : (
+                                              '-'
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Twitter</div>
+                                          <div className="mt-1 text-sm text-slate-700">
+                                            {twitterUrl ? (
+                                              <a href={twitterUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                                                {brand.twitter}
+                                              </a>
+                                            ) : (
+                                              '-'
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : null}
+
+                                  <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-4">
+                                    <div className="mb-3 text-sm font-semibold text-slate-900">Razones sociales vinculadas</div>
                                   {row.merchants.length === 0 ? (
                                     <div className="text-sm text-slate-500">Sin razones sociales vinculadas.</div>
                                   ) : (
@@ -562,6 +709,7 @@ export default function RetailersPage() {
                                       ))}
                                     </div>
                                   )}
+                                  </div>
                                 </div>
                               </td>
                             </tr>
@@ -577,7 +725,14 @@ export default function RetailersPage() {
         )}
       </div>
 
-      <Modal open={showCreateModal} title="Crear retailer" onClose={() => setShowCreateModal(false)}>
+      <Modal
+        open={showCreateModal}
+        title="Crear retailer"
+        onClose={() => {
+          setShowCreateModal(false);
+          resetRetailerForm();
+        }}
+      >
         <form onSubmit={saveRetailer} className="space-y-4">
           {activeCategories.length === 0 ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
@@ -612,6 +767,70 @@ export default function RetailersPage() {
             </select>
           </div>
 
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Logo</label>
+            <input
+              type="file"
+              accept="image/*"
+              className="mt-1 block w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm file:mr-3 file:rounded-full file:border-0 file:bg-slate-200 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-slate-700"
+              onChange={onRetailerLogoFileChange}
+            />
+            {retailerLogoFile ? <p className="mt-1 text-xs text-slate-500">Archivo: {retailerLogoFile.name}</p> : null}
+            {!retailerLogoFile && retailerLogoUrl.trim() ? (
+              <p className="mt-1 text-xs text-slate-500">Se usara el logo por URL configurado.</p>
+            ) : null}
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Logo URL</label>
+            <input
+              className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
+              value={retailerLogoUrl}
+              onChange={(event) => setRetailerLogoUrl(event.target.value)}
+              placeholder="https://..."
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Sitio web</label>
+            <input
+              className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
+              value={retailerSitioWeb}
+              onChange={(event) => setRetailerSitioWeb(event.target.value)}
+              placeholder="https://..."
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Facebook</label>
+            <input
+              className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
+              value={retailerFacebook}
+              onChange={(event) => setRetailerFacebook(event.target.value)}
+              placeholder="https://facebook.com/..."
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Instagram</label>
+            <input
+              className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
+              value={retailerInstagram}
+              onChange={(event) => setRetailerInstagram(event.target.value)}
+              placeholder="https://instagram.com/..."
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Twitter</label>
+            <input
+              className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
+              value={retailerTwitter}
+              onChange={(event) => setRetailerTwitter(event.target.value)}
+              placeholder="https://x.com/..."
+            />
+          </div>
+
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input
               type="checkbox"
@@ -626,7 +845,10 @@ export default function RetailersPage() {
             <button
               type="button"
               className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-700"
-              onClick={() => setShowCreateModal(false)}
+              onClick={() => {
+                setShowCreateModal(false);
+                resetRetailerForm();
+              }}
               disabled={saving}
             >
               Cancelar
@@ -642,7 +864,14 @@ export default function RetailersPage() {
         </form>
       </Modal>
 
-      <Modal open={showEditModal} title="Editar retailer" onClose={() => setShowEditModal(false)}>
+      <Modal
+        open={showEditModal}
+        title="Editar retailer"
+        onClose={() => {
+          setShowEditModal(false);
+          resetRetailerForm();
+        }}
+      >
         <form onSubmit={saveRetailer} className="space-y-4">
           {activeCategories.length === 0 ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
@@ -677,6 +906,70 @@ export default function RetailersPage() {
             </select>
           </div>
 
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Logo</label>
+            <input
+              type="file"
+              accept="image/*"
+              className="mt-1 block w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm file:mr-3 file:rounded-full file:border-0 file:bg-slate-200 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-slate-700"
+              onChange={onRetailerLogoFileChange}
+            />
+            {retailerLogoFile ? <p className="mt-1 text-xs text-slate-500">Archivo: {retailerLogoFile.name}</p> : null}
+            {!retailerLogoFile && retailerLogoUrl.trim() ? (
+              <p className="mt-1 text-xs text-slate-500">Se mantiene el logo actual por URL.</p>
+            ) : null}
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Logo URL</label>
+            <input
+              className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
+              value={retailerLogoUrl}
+              onChange={(event) => setRetailerLogoUrl(event.target.value)}
+              placeholder="https://..."
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Sitio web</label>
+            <input
+              className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
+              value={retailerSitioWeb}
+              onChange={(event) => setRetailerSitioWeb(event.target.value)}
+              placeholder="https://..."
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Facebook</label>
+            <input
+              className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
+              value={retailerFacebook}
+              onChange={(event) => setRetailerFacebook(event.target.value)}
+              placeholder="https://facebook.com/..."
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Instagram</label>
+            <input
+              className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
+              value={retailerInstagram}
+              onChange={(event) => setRetailerInstagram(event.target.value)}
+              placeholder="https://instagram.com/..."
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Twitter</label>
+            <input
+              className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
+              value={retailerTwitter}
+              onChange={(event) => setRetailerTwitter(event.target.value)}
+              placeholder="https://x.com/..."
+            />
+          </div>
+
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input
               type="checkbox"
@@ -691,7 +984,10 @@ export default function RetailersPage() {
             <button
               type="button"
               className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-700"
-              onClick={() => setShowEditModal(false)}
+              onClick={() => {
+                setShowEditModal(false);
+                resetRetailerForm();
+              }}
               disabled={saving}
             >
               Cancelar
