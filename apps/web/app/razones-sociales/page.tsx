@@ -510,6 +510,23 @@ export default function RazonesSocialesPage() {
     return baseOptions;
   }, [branchTargetMerchant, enforceActorBrand, actorBrandId, editingBranch]);
 
+  const retailerSelectionLocked = enforceActorBrand || branchRetailerOptions.length === 1;
+
+  useEffect(() => {
+    if (!showBranchCreateModal && !showBranchEditModal) return;
+    if (branchRetailerOptions.length !== 1) return;
+
+    const onlyRetailerId = branchRetailerOptions[0].id;
+    if (branchRetailerId !== onlyRetailerId) {
+      setBranchRetailerId(onlyRetailerId);
+    }
+  }, [
+    showBranchCreateModal,
+    showBranchEditModal,
+    branchRetailerOptions,
+    branchRetailerId,
+  ]);
+
   const saveBranch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -1081,7 +1098,7 @@ export default function RazonesSocialesPage() {
                 value={branchRetailerId}
                 onChange={(event) => setBranchRetailerId(event.target.value)}
                 required
-                disabled={enforceActorBrand}
+                disabled={retailerSelectionLocked}
               >
                 <option value="">Seleccionar retailer</option>
                 {branchRetailerOptions.map((brand) => (
@@ -1090,6 +1107,11 @@ export default function RazonesSocialesPage() {
                   </option>
                 ))}
               </select>
+              {branchRetailerOptions.length === 1 && !enforceActorBrand ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  Se selecciono automaticamente el unico retailer vinculado.
+                </p>
+              ) : null}
             </div>
             <div className="sm:col-span-2">
               <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Direccion *</label>
