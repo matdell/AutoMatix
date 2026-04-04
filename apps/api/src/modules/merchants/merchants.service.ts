@@ -18,6 +18,19 @@ export class MerchantsService {
         categoria: filters?.categoria,
       },
       orderBy: { createdAt: 'desc' },
+      include: {
+        brands: {
+          include: {
+            brand: {
+              select: {
+                id: true,
+                nombre: true,
+                activo: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -34,6 +47,19 @@ export class MerchantsService {
         },
       },
       orderBy: { createdAt: 'desc' },
+      include: {
+        brands: {
+          include: {
+            brand: {
+              select: {
+                id: true,
+                nombre: true,
+                activo: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 
