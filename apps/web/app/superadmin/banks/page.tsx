@@ -1,6 +1,6 @@
 'use client';
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import AppShell from '@/app/_components/AppShell';
 import { apiFetch, apiJson, getToken } from '@/lib/api';
 import { useRouter } from 'next/navigation';
@@ -34,6 +34,18 @@ type BankBranch = {
   tipo?: string | null;
   direccion?: string | null;
   activo?: boolean;
+};
+
+type BranchUser = {
+  id: string;
+  nombre: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  bankBranchId?: string | null;
+  brandId?: string | null;
+  merchantId?: string | null;
+  pointOfSaleId?: string | null;
 };
 
 type CreatedBank = {
@@ -73,6 +85,14 @@ type ModalProps = {
   children: React.ReactNode;
 };
 
+const roleLabels: Record<string, string> = {
+  BANK_ADMIN: 'Admin Banco',
+  BANK_OPS: 'Operaciones Banco',
+  BANK_APPROVER: 'Aprobador Banco',
+  BANK_BRANCH_MANAGER: 'Sucursal (Manager)',
+  BANK_BRANCH_OPERATOR: 'Sucursal (Operador)',
+};
+
 function Modal({ open, title, onClose, children }: ModalProps) {
   if (open === false) return null;
   return (
@@ -102,6 +122,9 @@ export default function SuperAdminBanksPage() {
   const [expandedBankId, setExpandedBankId] = useState<string | null>(null);
   const [branchCache, setBranchCache] = useState<Record<string, BankBranch[]>>({});
   const [branchLoading, setBranchLoading] = useState<Record<string, boolean>>({});
+  const [branchUsersCache, setBranchUsersCache] = useState<Record<string, BranchUser[]>>({});
+  const [branchUsersLoading, setBranchUsersLoading] = useState<Record<string, boolean>>({});
+  const [expandedBranchByBank, setExpandedBranchByBank] = useState<Record<string, string | null>>({});
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loadingBanks, setLoadingBanks] = useState(false);
@@ -250,6 +273,23 @@ export default function SuperAdminBanksPage() {
       setError(err instanceof Error ? err.message : 'No se pudieron cargar las sucursales');
     } finally {
       setBranchLoading((prev) => ({ ...prev, [bankId]: false }));
+    }
+  };
+
+  const loadBranchUsers = async (bankId: string) => {
+    if (bankId === '') return;
+    setBranchUsersLoading((prev) => ({ ...prev, [bankId]: true }));
+    try {
+      const data = await apiJson<BranchUser[]>(`/users?bankId=${bankId}`);
+      const scoped = data.filter(
+        (item) =>
+          Boolean(item.bankBranchId) && !item.brandId && !item.merchantId && !item.pointOfSaleId,
+      );
+      setBranchUsersCache((prev) => ({ ...prev, [bankId]: scoped }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudieron cargar los usuarios de sucursal');
+    } finally {
+      setBranchUsersLoading((prev) => ({ ...prev, [bankId]: false }));
     }
   };
 
@@ -716,11 +756,25 @@ export default function SuperAdminBanksPage() {
   const toggleExpand = (bankId: string) => {
     if (expandedBankId === bankId) {
       setExpandedBankId(null);
+      setExpandedBranchByBank((prev) => ({ ...prev, [bankId]: null }));
       return;
     }
     setExpandedBankId(bankId);
     if (!branchCache[bankId]) {
-      loadBranches(bankId);
+      void loadBranches(bankId);
+    }
+    if (!branchUsersCache[bankId]) {
+      void loadBranchUsers(bankId);
+    }
+  };
+
+  const toggleBranchUsers = (bankId: string, branchId: string) => {
+    setExpandedBranchByBank((prev) => ({
+      ...prev,
+      [bankId]: prev[bankId] === branchId ? null : branchId,
+    }));
+    if (!branchUsersCache[bankId] && !branchUsersLoading[bankId]) {
+      void loadBranchUsers(bankId);
     }
   };
 
@@ -792,6 +846,25 @@ export default function SuperAdminBanksPage() {
   };
 
   const tableColumnCount = showBranchControls ? 10 : 8;
+
+  const usersByBankAndBranch = useMemo(() => {
+    const grouped: Record<string, Record<string, BranchUser[]>> = {};
+    for (const [bankId, users] of Object.entries(branchUsersCache)) {
+      const byBranch: Record<string, BranchUser[]> = {};
+      for (const user of users) {
+        if (!user.bankBranchId) continue;
+        if (!byBranch[user.bankBranchId]) {
+          byBranch[user.bankBranchId] = [];
+        }
+        byBranch[user.bankBranchId].push(user);
+      }
+      for (const branchId of Object.keys(byBranch)) {
+        byBranch[branchId].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+      }
+      grouped[bankId] = byBranch;
+    }
+    return grouped;
+  }, [branchUsersCache]);
 
   return (
     <AppShell>
@@ -978,6 +1051,9 @@ export default function SuperAdminBanksPage() {
                       const expanded = expandedBankId === bank.id;
                       const branches = branchCache[bank.id] || [];
                       const isLoadingBranches = branchLoading[bank.id];
+                      const isLoadingBranchUsers = branchUsersLoading[bank.id] === true;
+                      const usersByBranch = usersByBankAndBranch[bank.id] || {};
+                      const expandedBranchId = expandedBranchByBank[bank.id] || null;
                       const hasCachedBranches = Object.prototype.hasOwnProperty.call(branchCache, bank.id);
                       const isActive = bank.activo !== false;
                       const isSelected = selectedBankIds.includes(bank.id);
@@ -990,9 +1066,8 @@ export default function SuperAdminBanksPage() {
                         .join('')
                         .toUpperCase();
                       return (
-                        <>
+                        <Fragment key={bank.id}>
                           <tr
-                            key={bank.id}
                             className={`hover:bg-surface-container-low transition-colors ${
                               isSelected ? 'bg-surface-container-low/60' : ''
                             }`}
@@ -1017,12 +1092,8 @@ export default function SuperAdminBanksPage() {
                                     toggleExpand(bank.id);
                                   }}
                                 >
-                                  <span
-                                    className={`material-symbols-outlined text-base transition-transform ${
-                                      expanded ? 'rotate-90' : ''
-                                    }`}
-                                  >
-                                    chevron_right
+                                  <span className={`text-sm font-bold leading-none transition-transform ${expanded ? 'rotate-90' : ''}`}>
+                                    {'>'}
                                   </span>
                                 </button>
                               </td>
@@ -1148,7 +1219,7 @@ export default function SuperAdminBanksPage() {
                             </td>
                           </tr>
                           {showBranchControls && expanded ? (
-                            <tr key={`${bank.id}-branches`}>
+                            <tr>
                               <td colSpan={tableColumnCount} className="px-6 pb-6">
                                 <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-4">
                                   <div className="flex items-center justify-between mb-4">
@@ -1173,6 +1244,9 @@ export default function SuperAdminBanksPage() {
                                       <table className="w-full text-left border-collapse">
                                         <thead>
                                           <tr className="bg-white/60">
+                                            <th className="px-4 py-2 text-[11px] font-bold text-slate-500 uppercase tracking-widest w-10">
+                                              &nbsp;
+                                            </th>
                                             <th className="px-4 py-2 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
                                               Nombre
                                             </th>
@@ -1194,35 +1268,119 @@ export default function SuperAdminBanksPage() {
                                           </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-200/60">
-                                          {branches.map((branch) => (
-                                            <tr key={branch.id} className="hover:bg-white/60">
-                                              <td className="px-4 py-3 text-sm text-slate-700">{branch.nombre}</td>
-                                              <td className="px-4 py-3 text-sm text-slate-600">{branch.localidad || '-'}</td>
-                                              <td className="px-4 py-3 text-sm text-slate-600">{branch.direccion || '-'}</td>
-                                              <td className="px-4 py-3 text-sm text-slate-600">{branch.codigo || '-'}</td>
-                                              <td className="px-4 py-3 text-sm text-slate-600">
-                                                {branch.activo === false ? 'Inactiva' : 'Activa'}
-                                              </td>
-                                              <td className="px-4 py-3 text-right">
-                                                <div className="flex items-center justify-end gap-3">
-                                                  <button
-                                                    type="button"
-                                                    className="text-xs font-bold text-primary hover:underline"
-                                                    onClick={() => startEditBranch(bank.id, branch)}
-                                                  >
-                                                    Editar
-                                                  </button>
-                                                  <button
-                                                    type="button"
-                                                    className="text-xs font-bold text-rose-600 hover:underline"
-                                                    onClick={() => onDeleteBranch(bank.id, branch)}
-                                                  >
-                                                    Eliminar
-                                                  </button>
-                                                </div>
-                                              </td>
-                                            </tr>
-                                          ))}
+                                          {branches.map((branch) => {
+                                            const assignedUsers = usersByBranch[branch.id] || [];
+                                            const isBranchExpanded = expandedBranchId === branch.id;
+                                            return (
+                                              <Fragment key={branch.id}>
+                                                <tr className="hover:bg-white/60">
+                                                  <td className="px-4 py-3">
+                                                    <button
+                                                      type="button"
+                                                      aria-expanded={isBranchExpanded}
+                                                      aria-label={
+                                                        isBranchExpanded
+                                                          ? 'Ocultar usuarios de sucursal'
+                                                          : 'Ver usuarios de sucursal'
+                                                      }
+                                                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+                                                      onClick={() => toggleBranchUsers(bank.id, branch.id)}
+                                                    >
+                                                      <span className={`text-sm font-bold leading-none transition-transform ${isBranchExpanded ? 'rotate-90' : ''}`}>
+                                                        {'>'}
+                                                      </span>
+                                                    </button>
+                                                  </td>
+                                                  <td className="px-4 py-3 text-sm text-slate-700">
+                                                    <div className="font-semibold">{branch.nombre}</div>
+                                                    <div className="text-xs text-slate-500">
+                                                      {assignedUsers.length} usuario
+                                                      {assignedUsers.length === 1 ? '' : 's'} asignado
+                                                      {assignedUsers.length === 1 ? '' : 's'}
+                                                    </div>
+                                                  </td>
+                                                  <td className="px-4 py-3 text-sm text-slate-600">
+                                                    {branch.localidad || '-'}
+                                                  </td>
+                                                  <td className="px-4 py-3 text-sm text-slate-600">
+                                                    {branch.direccion || '-'}
+                                                  </td>
+                                                  <td className="px-4 py-3 text-sm text-slate-600">{branch.codigo || '-'}</td>
+                                                  <td className="px-4 py-3 text-sm text-slate-600">
+                                                    {branch.activo === false ? 'Inactiva' : 'Activa'}
+                                                  </td>
+                                                  <td className="px-4 py-3 text-right">
+                                                    <div className="flex items-center justify-end gap-3">
+                                                      <button
+                                                        type="button"
+                                                        className="text-xs font-bold text-primary hover:underline"
+                                                        onClick={() => startEditBranch(bank.id, branch)}
+                                                      >
+                                                        Editar
+                                                      </button>
+                                                      <button
+                                                        type="button"
+                                                        className="text-xs font-bold text-rose-600 hover:underline"
+                                                        onClick={() => onDeleteBranch(bank.id, branch)}
+                                                      >
+                                                        Eliminar
+                                                      </button>
+                                                    </div>
+                                                  </td>
+                                                </tr>
+                                                {isBranchExpanded ? (
+                                                  <tr>
+                                                    <td colSpan={7} className="px-4 pb-4">
+                                                      <div className="rounded-lg border border-slate-200/70 bg-white/80 p-4">
+                                                        <div className="mb-3 flex items-center justify-between">
+                                                          <h4 className="text-sm font-semibold text-slate-900">
+                                                            Usuarios asignados
+                                                          </h4>
+                                                          <span className="text-xs text-slate-500">
+                                                            {assignedUsers.length} total
+                                                          </span>
+                                                        </div>
+                                                        {isLoadingBranchUsers ? (
+                                                          <div className="text-sm text-slate-500">
+                                                            Cargando usuarios...
+                                                          </div>
+                                                        ) : assignedUsers.length === 0 ? (
+                                                          <div className="text-sm text-slate-500">
+                                                            No hay usuarios asignados a esta sucursal.
+                                                          </div>
+                                                        ) : (
+                                                          <div className="space-y-2">
+                                                            {assignedUsers.map((user) => (
+                                                              <div
+                                                                key={user.id}
+                                                                className="rounded-lg border border-slate-200/70 bg-white px-3 py-2"
+                                                              >
+                                                                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                                                  <div>
+                                                                    <div className="text-sm font-semibold text-slate-800">
+                                                                      {user.nombre}
+                                                                    </div>
+                                                                    <div className="text-xs text-slate-500">
+                                                                      {user.email}
+                                                                    </div>
+                                                                  </div>
+                                                                  <div className="text-xs text-slate-600">
+                                                                    {roleLabels[user.role] || user.role}
+                                                                    <span className="mx-1 text-slate-400">|</span>
+                                                                    {user.isActive ? 'Activo' : 'Inactivo'}
+                                                                  </div>
+                                                                </div>
+                                                              </div>
+                                                            ))}
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    </td>
+                                                  </tr>
+                                                ) : null}
+                                              </Fragment>
+                                            );
+                                          })}
                                         </tbody>
                                       </table>
                                     </div>
@@ -1231,7 +1389,7 @@ export default function SuperAdminBanksPage() {
                               </td>
                             </tr>
                           ) : null}
-                        </>
+                        </Fragment>
                       );
                     })}
                   </tbody>
