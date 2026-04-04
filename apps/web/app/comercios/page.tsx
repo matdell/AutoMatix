@@ -32,7 +32,7 @@ type BrandRow = {
 };
 
 const viewLabels = {
-  brands: 'Marcas',
+  brands: 'Retailers',
   merchants: 'Razones sociales',
 } as const;
 
@@ -119,7 +119,7 @@ export default function ComerciosPage() {
         } else {
           byBrand.set('__no_brand__', {
             id: '__no_brand__',
-            nombre: 'Sin marca',
+            nombre: 'Sin retailer',
             activo: true,
             merchants: [merchant],
           });
@@ -180,7 +180,7 @@ export default function ComerciosPage() {
   return (
     <AppShell>
       <header className="fixed top-0 left-[var(--sidebar-width)] right-0 h-16 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/15 flex items-center justify-between px-8 shadow-[0px_12px_32px_rgba(42,52,57,0.06)] font-['Inter'] antialiased tracking-tight">
-        <h1 className="text-lg font-extrabold text-slate-900 tracking-tighter">Comercios - Marcas y Razones sociales</h1>
+        <h1 className="text-lg font-extrabold text-slate-900 tracking-tighter">Comercios - Retailers y Razones sociales</h1>
       </header>
 
       <div className="pt-24 px-8 pb-12 space-y-6">
@@ -196,7 +196,7 @@ export default function ComerciosPage() {
 
             <section className="grid gap-4 md:grid-cols-3">
               <div className="bg-surface-container-lowest rounded-xl px-4 py-4 shadow-[0px_8px_24px_rgba(42,52,57,0.06)]">
-                <div className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Marcas</div>
+                <div className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Retailers</div>
                 <div className="mt-1 text-2xl font-extrabold text-on-surface">{totalBrands}</div>
               </div>
               <div className="bg-surface-container-lowest rounded-xl px-4 py-4 shadow-[0px_8px_24px_rgba(42,52,57,0.06)]">
@@ -204,7 +204,7 @@ export default function ComerciosPage() {
                 <div className="mt-1 text-2xl font-extrabold text-on-surface">{totalMerchants}</div>
               </div>
               <div className="bg-surface-container-lowest rounded-xl px-4 py-4 shadow-[0px_8px_24px_rgba(42,52,57,0.06)]">
-                <div className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Sin marca</div>
+                <div className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Sin retailer</div>
                 <div className="mt-1 text-2xl font-extrabold text-on-surface">{merchantsWithoutBrand}</div>
               </div>
             </section>
@@ -237,8 +237,8 @@ export default function ComerciosPage() {
                   className="w-full md:w-80 bg-surface-container-low border-none rounded-xl px-4 py-2 text-sm"
                   placeholder={
                     view === 'brands'
-                      ? 'Buscar marca o razon social...'
-                      : 'Buscar razon social, cuit o marca...'
+                      ? 'Buscar retailer o razon social...'
+                      : 'Buscar razon social, cuit o retailer...'
                   }
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
@@ -251,7 +251,7 @@ export default function ComerciosPage() {
                     <thead>
                       <tr className="bg-surface-container-low/50">
                         <th className="px-4 py-3 w-10">&nbsp;</th>
-                        <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Marca</th>
+                        <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Retailer</th>
                         <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Razones sociales</th>
                         <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Estado</th>
                       </tr>
@@ -350,7 +350,7 @@ export default function ComerciosPage() {
                         <th className="px-4 py-3 w-10">&nbsp;</th>
                         <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Razon social</th>
                         <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">CUIT</th>
-                        <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Marcas vinculadas</th>
+                        <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Retailers vinculados</th>
                         <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Estado</th>
                       </tr>
                     </thead>
@@ -407,9 +407,9 @@ export default function ComerciosPage() {
                               <tr>
                                 <td colSpan={5} className="px-4 pb-4">
                                   <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-4">
-                                    <div className="mb-3 text-sm font-semibold text-slate-900">Marcas vinculadas</div>
+                                    <div className="mb-3 text-sm font-semibold text-slate-900">Retailers vinculados</div>
                                     {linkedBrands.length === 0 ? (
-                                      <div className="text-sm text-slate-500">Esta razon social no tiene marcas vinculadas.</div>
+                                      <div className="text-sm text-slate-500">Esta razon social no tiene retailers vinculados.</div>
                                     ) : (
                                       <div className="flex flex-wrap gap-2">
                                         {linkedBrands.map((brand) => (

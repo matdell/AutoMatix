@@ -60,4 +60,8 @@ export class UpdateBranchDto {
   @IsOptional()
   @IsString()
   shoppingId?: string;
+
+  @IsOptional()
+  @IsString()
+  retailerId?: string;
 }

@@ -6,6 +6,8 @@ import { AuditService } from '../audit/audit.service';
 import { AuditAction, CardNetwork, MerchantStatus, Prisma } from '@prisma/client';
 import { parse } from 'csv-parse/sync';
 
+type MerchantRetailerCacheValue = string | '__NONE__' | '__MULTI__';
+
 @Injectable()
 export class MerchantsService {
   constructor(private prisma: PrismaService, private audit: AuditService) {}
@@ -76,7 +78,21 @@ export class MerchantsService {
       where: { tenantId, id },
       include: {
         branches: {
-          include: { shopping: true, establishments: true },
+          include: {
+            shopping: true,
+            establishments: true,
+            retailer: {
+              select: {
+                id: true,
+                nombre: true,
+                logoUrl: true,
+                sitioWeb: true,
+                emailPrincipal: true,
+                telefonoPrincipal: true,
+                activo: true,
+              },
+            },
+          },
         },
         brands: { include: { brand: true } },
       },
@@ -414,6 +430,7 @@ export class MerchantsService {
         data: {
           tenantId,
           merchantId: merchant.id,
+          retailerId: brand.id,
           nombre: branchNombre,
           direccion: direccion || 'Sin direccion',
           calle: calle || undefined,
@@ -495,6 +512,81 @@ export class MerchantsService {
     return map;
   }
 
+  private async resolveRetailerIdForBranch(params: {
+    tenantId: string;
+    merchantId: string;
+    explicitRetailerId?: string | null;
+    fallbackRetailerId?: string | null;
+    contextLabel?: string;
+    singleRetailerCache?: Map<string, MerchantRetailerCacheValue>;
+  }) {
+    const explicitRetailerId = params.explicitRetailerId?.trim();
+    if (explicitRetailerId) {
+      const retailer = await this.prisma.brand.findFirst({
+        where: { tenantId: params.tenantId, id: explicitRetailerId },
+        select: { id: true },
+      });
+      if (!retailer) {
+        throw new BadRequestException(`Retailer invalido para ${params.contextLabel ?? 'el PDV'}`);
+      }
+      const link = await this.prisma.brandLegalEntity.findFirst({
+        where: {
+          tenantId: params.tenantId,
+          merchantId: params.merchantId,
+          brandId: explicitRetailerId,
+        },
+        select: { id: true },
+      });
+      if (!link) {
+        throw new BadRequestException(
+          `El retailer indicado no esta vinculado a la razon social para ${params.contextLabel ?? 'el PDV'}`,
+        );
+      }
+      return explicitRetailerId;
+    }
+
+    const fallbackRetailerId = params.fallbackRetailerId?.trim();
+    if (fallbackRetailerId) {
+      return fallbackRetailerId;
+    }
+
+    const cacheKey = `${params.tenantId}:${params.merchantId}`;
+    const cached = params.singleRetailerCache?.get(cacheKey);
+    if (cached) {
+      if (cached === '__NONE__') {
+        throw new BadRequestException(
+          `No se puede asignar retailer a ${params.contextLabel ?? 'el PDV'}: la razon social no tiene retailers vinculados`,
+        );
+      }
+      if (cached === '__MULTI__') {
+        throw new BadRequestException(
+          `No se puede asignar retailer a ${params.contextLabel ?? 'el PDV'}: la razon social tiene multiples retailers, informa brand_id`,
+        );
+      }
+      return cached;
+    }
+
+    const links = await this.prisma.brandLegalEntity.findMany({
+      where: { tenantId: params.tenantId, merchantId: params.merchantId },
+      select: { brandId: true },
+      take: 2,
+    });
+    if (links.length === 1) {
+      params.singleRetailerCache?.set(cacheKey, links[0].brandId);
+      return links[0].brandId;
+    }
+    if (links.length === 0) {
+      params.singleRetailerCache?.set(cacheKey, '__NONE__');
+      throw new BadRequestException(
+        `No se puede asignar retailer a ${params.contextLabel ?? 'el PDV'}: la razon social no tiene retailers vinculados`,
+      );
+    }
+    params.singleRetailerCache?.set(cacheKey, '__MULTI__');
+    throw new BadRequestException(
+      `No se puede asignar retailer a ${params.contextLabel ?? 'el PDV'}: la razon social tiene multiples retailers, informa brand_id`,
+    );
+  }
+
   async exportPortableCsv(params: {
     tenantId: string;
     includeBankSpecificData: boolean;
@@ -528,6 +620,7 @@ export class MerchantsService {
           include: {
             shopping: true,
             establishments: true,
+            retailer: true,
           },
         },
       },
@@ -582,15 +675,13 @@ export class MerchantsService {
       const scopedBrands = merchant.brands
         .map((link) => link.brand)
         .filter((brand) => !params.brandId || brand.id === params.brandId);
-      const brands = scopedBrands.length > 0 ? scopedBrands : [null];
-      const branches = merchant.branches.length > 0 ? merchant.branches : [null];
+      const branches = merchant.branches.filter(
+        (branch) => !params.brandId || branch.retailerId === params.brandId,
+      );
 
-      for (const brand of brands) {
-        for (const branch of branches) {
-          const establishments = branch
-            ? this.buildEstablishmentMap(branch.establishments)
-            : new Map<CardNetwork, string>();
-
+      if (branches.length === 0) {
+        const brandsWithoutPdv = scopedBrands.length > 0 ? scopedBrands : [null];
+        for (const brand of brandsWithoutPdv) {
           const row = [
             brand?.id ?? '',
             brand?.nombre ?? '',
@@ -606,36 +697,85 @@ export class MerchantsService {
             merchant.contactoEmail ?? '',
             merchant.telefono ?? '',
             merchant.direccionSocial ?? '',
-            branch?.id ?? '',
-            branch?.nombre ?? '',
-            branch?.direccion ?? '',
-            branch?.calle ?? '',
-            branch?.numero ?? '',
-            branch?.piso ?? '',
-            branch?.ciudad ?? '',
-            branch?.provincia ?? '',
-            branch?.pais ?? '',
-            branch?.codigoPostal ?? '',
-            branch?.shopping?.nombre ?? '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
           ];
-
           if (params.includeBankSpecificData) {
             row.push(
               merchant.processor ?? '',
               merchant.merchantNumber ?? '',
-              branch?.processor ?? '',
-              branch?.merchantNumber ?? '',
-              establishments.get(CardNetwork.VISA) ?? '',
-              establishments.get(CardNetwork.MASTERCARD) ?? '',
-              establishments.get(CardNetwork.AMEX) ?? '',
-              establishments.get(CardNetwork.CABAL) ?? '',
-              establishments.get(CardNetwork.NARANJA) ?? '',
-              establishments.get(CardNetwork.OTRA) ?? '',
+              '',
+              '',
+              '',
+              '',
+              '',
+              '',
+              '',
+              '',
             );
           }
-
           rows.push(row);
         }
+        continue;
+      }
+
+      for (const branch of branches) {
+        const brand = branch.retailer;
+        const establishments = this.buildEstablishmentMap(branch.establishments);
+
+        const row = [
+          brand?.id ?? '',
+          brand?.nombre ?? '',
+          brand?.logoUrl ?? '',
+          brand?.sitioWeb ?? '',
+          brand?.emailPrincipal ?? '',
+          brand?.telefonoPrincipal ?? '',
+          merchant.id,
+          merchant.nombre,
+          merchant.razonSocial ?? '',
+          merchant.cuit ?? '',
+          merchant.categoria,
+          merchant.contactoEmail ?? '',
+          merchant.telefono ?? '',
+          merchant.direccionSocial ?? '',
+          branch.id,
+          branch.nombre,
+          branch.direccion,
+          branch.calle ?? '',
+          branch.numero ?? '',
+          branch.piso ?? '',
+          branch.ciudad,
+          branch.provincia,
+          branch.pais,
+          branch.codigoPostal ?? '',
+          branch.shopping?.nombre ?? '',
+        ];
+
+        if (params.includeBankSpecificData) {
+          row.push(
+            merchant.processor ?? '',
+            merchant.merchantNumber ?? '',
+            branch.processor ?? '',
+            branch.merchantNumber ?? '',
+            establishments.get(CardNetwork.VISA) ?? '',
+            establishments.get(CardNetwork.MASTERCARD) ?? '',
+            establishments.get(CardNetwork.AMEX) ?? '',
+            establishments.get(CardNetwork.CABAL) ?? '',
+            establishments.get(CardNetwork.NARANJA) ?? '',
+            establishments.get(CardNetwork.OTRA) ?? '',
+          );
+        }
+
+        rows.push(row);
       }
     }
 
@@ -700,6 +840,7 @@ export class MerchantsService {
     const shoppingCache = new Map<string, string>();
     const brandCacheByName = new Map<string, string>();
     const merchantCacheByKey = new Map<string, string>();
+    const merchantRetailerCache = new Map<string, MerchantRetailerCacheValue>();
     const linkedPairs = new Set<string>();
 
     for (const row of normalizedRecords) {
@@ -940,7 +1081,7 @@ export class MerchantsService {
         }
       }
 
-      if (resolvedBrandId && !params.merchantId) {
+      if (resolvedBrandId) {
         const linkKey = `${resolvedBrandId}:${resolvedMerchantId}`;
         if (!linkedPairs.has(linkKey)) {
           const existingLink = await this.prisma.brandLegalEntity.findFirst({
@@ -1013,7 +1154,7 @@ export class MerchantsService {
               id: pdvIdFromRow,
               merchantId: resolvedMerchantId,
             },
-            select: { id: true },
+            select: { id: true, retailerId: true },
           })
         : null;
 
@@ -1025,15 +1166,25 @@ export class MerchantsService {
             ...(pdvName ? { nombre: { equals: pdvName, mode: 'insensitive' } } : {}),
             ...(pdvAddress ? { direccion: { equals: pdvAddress, mode: 'insensitive' } } : {}),
           },
-          select: { id: true },
+          select: { id: true, retailerId: true },
         });
       }
+
+      const retailerIdForBranch = await this.resolveRetailerIdForBranch({
+        tenantId: params.tenantId,
+        merchantId: resolvedMerchantId,
+        explicitRetailerId: resolvedBrandId,
+        fallbackRetailerId: branch?.retailerId ?? null,
+        contextLabel: pdvName || pdvIdFromRow || 'el PDV',
+        singleRetailerCache: merchantRetailerCache,
+      });
 
       if (!branch) {
         const createdBranch = await this.prisma.branch.create({
           data: {
             tenantId: params.tenantId,
             merchantId: resolvedMerchantId,
+            retailerId: retailerIdForBranch,
             nombre: pdvName || `${merchantName || merchantRazonSocial || 'PDV'} - ${pdvCity || 'Local'}`,
             direccion: pdvAddress || 'Sin direccion',
             calle: pdvStreet || undefined,
@@ -1047,12 +1198,15 @@ export class MerchantsService {
             merchantNumber: params.includeBankSpecificData ? pdvMerchantNumber || undefined : undefined,
             processor: params.includeBankSpecificData ? pdvProcessor || undefined : undefined,
           },
-          select: { id: true },
+          select: { id: true, retailerId: true },
         });
         branch = createdBranch;
         result.createdBranches += 1;
       } else {
         const branchUpdateData: Prisma.BranchUncheckedUpdateInput = {};
+        if (branch.retailerId !== retailerIdForBranch) {
+          branchUpdateData.retailerId = retailerIdForBranch;
+        }
         if (pdvName) branchUpdateData.nombre = pdvName;
         if (pdvAddress) branchUpdateData.direccion = pdvAddress;
         if (pdvStreet) branchUpdateData.calle = pdvStreet;

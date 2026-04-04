@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
@@ -14,11 +14,48 @@ export class BranchesService {
     private audit: AuditService,
   ) {}
 
+  private async assertRetailerBelongsToMerchant(tenantId: string, merchantId: string, retailerId: string) {
+    const retailer = await this.prisma.brand.findFirst({
+      where: { tenantId, id: retailerId },
+      select: { id: true },
+    });
+    if (!retailer) {
+      throw new BadRequestException('Retailer invalido');
+    }
+
+    const link = await this.prisma.brandLegalEntity.findFirst({
+      where: { tenantId, merchantId, brandId: retailerId },
+      select: { id: true },
+    });
+    if (!link) {
+      throw new BadRequestException('El retailer no esta vinculado a la razon social');
+    }
+  }
+
+  private async inferSingleRetailerId(tenantId: string, merchantId: string): Promise<string | null> {
+    const links = await this.prisma.brandLegalEntity.findMany({
+      where: { tenantId, merchantId },
+      select: { brandId: true },
+      take: 2,
+    });
+    if (links.length === 1) {
+      return links[0].brandId;
+    }
+    return null;
+  }
+
   async listByMerchant(tenantId: string, merchantId: string) {
     return this.prisma.branch.findMany({
       where: { tenantId, merchantId },
       orderBy: { createdAt: 'desc' },
       include: {
+        retailer: {
+          select: {
+            id: true,
+            nombre: true,
+            activo: true,
+          },
+        },
         shopping: true,
         establishments: true,
       },
@@ -28,7 +65,17 @@ export class BranchesService {
   async get(tenantId: string, id: string) {
     const branch = await this.prisma.branch.findFirst({
       where: { tenantId, id },
-      include: { shopping: true, establishments: true },
+      include: {
+        retailer: {
+          select: {
+            id: true,
+            nombre: true,
+            activo: true,
+          },
+        },
+        shopping: true,
+        establishments: true,
+      },
     });
     if (!branch) {
       throw new NotFoundException('Sucursal no encontrada');
@@ -48,6 +95,27 @@ export class BranchesService {
     const merchant = await this.prisma.merchant.findFirst({ where: { tenantId, id: merchantId } });
     if (!merchant) {
       throw new NotFoundException('Comercio no encontrado');
+    }
+
+    let retailerId = dto.retailerId?.trim() || '';
+    if (retailerId) {
+      await this.assertRetailerBelongsToMerchant(tenantId, merchantId, retailerId);
+    } else {
+      const inferredRetailerId = await this.inferSingleRetailerId(tenantId, merchantId);
+      if (!inferredRetailerId) {
+        const linkCount = await this.prisma.brandLegalEntity.count({
+          where: { tenantId, merchantId },
+        });
+        if (linkCount === 0) {
+          throw new BadRequestException(
+            'La razon social no tiene retailers vinculados. Vincula un retailer antes de crear el PDV.',
+          );
+        }
+        throw new BadRequestException(
+          'La razon social tiene multiples retailers. Debes indicar retailerId para crear el PDV.',
+        );
+      }
+      retailerId = inferredRetailerId;
     }
 
     let lat = dto.lat;
@@ -79,6 +147,7 @@ export class BranchesService {
         merchantNumber: dto.merchantNumber,
         processor: dto.processor,
         shoppingId: dto.shoppingId,
+        retailerId,
       },
     });
 
@@ -88,7 +157,7 @@ export class BranchesService {
       action: AuditAction.CREATE,
       entity: 'Branch',
       entityId: branch.id,
-      after: { nombre: branch.nombre, merchantId },
+      after: { nombre: branch.nombre, merchantId, retailerId: branch.retailerId },
     });
 
     return branch;
@@ -96,6 +165,21 @@ export class BranchesService {
 
   async update(tenantId: string, id: string, dto: UpdateBranchDto, actorId?: string) {
     const before = await this.get(tenantId, id);
+
+    let retailerIdToSet: string | undefined;
+    if (dto.retailerId !== undefined) {
+      const normalizedRetailerId = dto.retailerId.trim();
+      if (!normalizedRetailerId) {
+        throw new BadRequestException('retailerId invalido');
+      }
+      await this.assertRetailerBelongsToMerchant(tenantId, before.merchantId, normalizedRetailerId);
+      retailerIdToSet = normalizedRetailerId;
+    } else if (!before.retailerId) {
+      const inferredRetailerId = await this.inferSingleRetailerId(tenantId, before.merchantId);
+      if (inferredRetailerId) {
+        retailerIdToSet = inferredRetailerId;
+      }
+    }
 
     let lat = dto.lat;
     let lng = dto.lng;
@@ -125,6 +209,7 @@ export class BranchesService {
         merchantNumber: dto.merchantNumber ?? undefined,
         processor: dto.processor ?? undefined,
         shoppingId: dto.shoppingId ?? undefined,
+        retailerId: retailerIdToSet ?? undefined,
       },
     });
 
@@ -134,8 +219,8 @@ export class BranchesService {
       action: AuditAction.UPDATE,
       entity: 'Branch',
       entityId: branch.id,
-      before: { nombre: before.nombre, direccion: before.direccion },
-      after: { nombre: branch.nombre, direccion: branch.direccion },
+      before: { nombre: before.nombre, direccion: before.direccion, retailerId: before.retailerId },
+      after: { nombre: branch.nombre, direccion: branch.direccion, retailerId: branch.retailerId },
     });
 
     return branch;

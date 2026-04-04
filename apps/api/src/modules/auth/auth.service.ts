@@ -420,6 +420,24 @@ export class AuthService {
       if (!pointOfSale || pointOfSale.tenantId !== targetTenantId) {
         throw new BadRequestException('Punto de venta invalido');
       }
+      if (actorRole === Role.BRAND_ADMIN && actor.brandId) {
+        if (pointOfSale.retailerId && pointOfSale.retailerId !== actor.brandId) {
+          throw new ForbiddenException('No autorizado para asignar un PDV de otro retailer');
+        }
+        if (!pointOfSale.retailerId) {
+          const allowed = await this.prisma.brandLegalEntity.findFirst({
+            where: {
+              tenantId: targetTenantId,
+              merchantId: pointOfSale.merchantId,
+              brandId: actor.brandId,
+            },
+            select: { id: true },
+          });
+          if (!allowed) {
+            throw new ForbiddenException('No autorizado para asignar un PDV fuera de tu retailer');
+          }
+        }
+      }
       resolvedMerchantId = pointOfSale.merchantId;
       if (dto.merchantId && dto.merchantId !== pointOfSale.merchantId) {
         throw new BadRequestException('El punto de venta no pertenece a la razon social indicada');

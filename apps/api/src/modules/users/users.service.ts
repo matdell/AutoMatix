@@ -122,7 +122,11 @@ export class UsersService {
       const branchIds = merchantIds.length
         ? (
             await this.prisma.branch.findMany({
-              where: { tenantId, merchantId: { in: merchantIds } },
+              where: {
+                tenantId,
+                merchantId: { in: merchantIds },
+                OR: [{ retailerId: scope.brandId }, { retailerId: null }],
+              },
               select: { id: true },
             })
           ).map((branch) => branch.id)
@@ -385,6 +389,24 @@ export class UsersService {
       if (!pointOfSale || pointOfSale.tenantId !== tenantId) {
         throw new ForbiddenException('Punto de venta invalido');
       }
+      if (actorScope?.role === Role.BRAND_ADMIN && actorScope.brandId) {
+        if (pointOfSale.retailerId && pointOfSale.retailerId !== actorScope.brandId) {
+          throw new ForbiddenException('No autorizado para asignar un PDV de otro retailer');
+        }
+        if (!pointOfSale.retailerId) {
+          const allowed = await this.prisma.brandLegalEntity.findFirst({
+            where: {
+              tenantId,
+              merchantId: pointOfSale.merchantId,
+              brandId: actorScope.brandId,
+            },
+            select: { id: true },
+          });
+          if (!allowed) {
+            throw new ForbiddenException('No autorizado para asignar un PDV fuera de tu retailer');
+          }
+        }
+      }
       if (normalizedMerchantId && normalizedMerchantId !== pointOfSale.merchantId) {
         throw new ForbiddenException('El punto de venta no pertenece a la razon social indicada');
       }
@@ -610,6 +632,9 @@ export class UsersService {
           const pos = await this.prisma.branch.findUnique({ where: { id: pointOfSaleId } });
           if (!pos || pos.tenantId !== tenantId) {
             throw new Error('pointOfSaleId no pertenece al banco');
+          }
+          if (brandId && pos.retailerId && brandId !== pos.retailerId) {
+            throw new Error('pointOfSaleId no corresponde al brandId');
           }
           if (resolvedMerchantId && resolvedMerchantId !== pos.merchantId) {
             throw new Error('pointOfSaleId no corresponde al merchantId');

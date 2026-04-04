@@ -198,6 +198,7 @@ model Brand {
 
   legalEntities BrandLegalEntity[]
   categories   BrandCategory[]
+  branches     Branch[]
   users        User[]
 
   @@index([tenantId])
@@ -284,6 +285,8 @@ model Branch {
   bank          Bank     @relation(fields: [tenantId], references: [id])
   merchantId    String
   merchant      Merchant @relation(fields: [merchantId], references: [id])
+  retailerId    String?
+  retailer      Brand?   @relation(fields: [retailerId], references: [id])
   nombre        String
   direccion     String
   calle         String?
@@ -310,6 +313,7 @@ model Branch {
 
   @@index([tenantId])
   @@index([merchantId])
+  @@index([retailerId])
   @@index([shoppingId])
 }
 

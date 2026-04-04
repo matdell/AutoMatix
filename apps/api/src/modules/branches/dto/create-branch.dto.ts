@@ -60,4 +60,8 @@ export class CreateBranchDto {
   @IsOptional()
   @IsString()
   shoppingId?: string;
+
+  @IsOptional()
+  @IsString()
+  retailerId?: string;
 }
