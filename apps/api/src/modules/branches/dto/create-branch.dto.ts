@@ -61,7 +61,7 @@ export class CreateBranchDto {
   @IsString()
   shoppingId?: string;
 
-  @IsOptional()
   @IsString()
-  retailerId?: string;
+  @IsNotEmpty()
+  retailerId: string;
 }

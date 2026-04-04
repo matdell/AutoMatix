@@ -97,26 +97,11 @@ export class BranchesService {
       throw new NotFoundException('Comercio no encontrado');
     }
 
-    let retailerId = dto.retailerId?.trim() || '';
-    if (retailerId) {
-      await this.assertRetailerBelongsToMerchant(tenantId, merchantId, retailerId);
-    } else {
-      const inferredRetailerId = await this.inferSingleRetailerId(tenantId, merchantId);
-      if (!inferredRetailerId) {
-        const linkCount = await this.prisma.brandLegalEntity.count({
-          where: { tenantId, merchantId },
-        });
-        if (linkCount === 0) {
-          throw new BadRequestException(
-            'La razon social no tiene retailers vinculados. Vincula un retailer antes de crear el PDV.',
-          );
-        }
-        throw new BadRequestException(
-          'La razon social tiene multiples retailers. Debes indicar retailerId para crear el PDV.',
-        );
-      }
-      retailerId = inferredRetailerId;
+    const retailerId = dto.retailerId?.trim() || '';
+    if (!retailerId) {
+      throw new BadRequestException('El retailer es obligatorio para crear el PDV');
     }
+    await this.assertRetailerBelongsToMerchant(tenantId, merchantId, retailerId);
 
     let lat = dto.lat;
     let lng = dto.lng;
@@ -178,6 +163,8 @@ export class BranchesService {
       const inferredRetailerId = await this.inferSingleRetailerId(tenantId, before.merchantId);
       if (inferredRetailerId) {
         retailerIdToSet = inferredRetailerId;
+      } else {
+        throw new BadRequestException('El retailer es obligatorio para actualizar este PDV');
       }
     }
 

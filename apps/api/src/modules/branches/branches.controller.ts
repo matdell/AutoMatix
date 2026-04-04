@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   NotFoundException,
   Param,
@@ -74,6 +75,10 @@ export class BranchesController {
       if (!allowed) {
         throw new NotFoundException('Razon social no encontrada');
       }
+      if (dto.retailerId && dto.retailerId !== user.brandId) {
+        throw new ForbiddenException('No autorizado para crear PDV en otro retailer');
+      }
+      dto.retailerId = user.brandId;
     }
     const resolvedMerchant =
       (user.role === Role.LEGAL_ENTITY_ADMIN ||
@@ -106,6 +111,15 @@ export class BranchesController {
       const allowed = await this.branchesService.isMerchantInBrand(user.tenantId, user.brandId, branch.merchantId);
       if (!allowed) {
         throw new NotFoundException('Punto de venta no encontrado');
+      }
+      if (branch.retailerId && branch.retailerId !== user.brandId) {
+        throw new NotFoundException('Punto de venta no encontrado');
+      }
+      if (dto.retailerId !== undefined && dto.retailerId !== user.brandId) {
+        throw new ForbiddenException('No autorizado para mover PDV a otro retailer');
+      }
+      if (!branch.retailerId && dto.retailerId === undefined) {
+        dto.retailerId = user.brandId;
       }
     }
     if (
