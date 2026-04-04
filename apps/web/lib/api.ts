@@ -1,5 +1,13 @@
+const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim() || '';
+const normalizedConfiguredApiUrl = configuredApiUrl.replace(/\/+$/, '');
+const isLocalhostApiInProduction =
+  process.env.NODE_ENV === 'production' &&
+  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/i.test(normalizedConfiguredApiUrl);
+
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+  normalizedConfiguredApiUrl && !isLocalhostApiInProduction
+    ? normalizedConfiguredApiUrl
+    : '/api';
 
 export function getToken() {
   if (typeof window === 'undefined') return null;
@@ -23,7 +31,18 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
   if (token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  } catch (error) {
+    if (typeof window !== 'undefined' && token) {
+      clearToken();
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+    throw error;
+  }
   if (typeof window !== 'undefined') {
     const nextToken = response.headers.get('x-access-token');
     if (nextToken) {

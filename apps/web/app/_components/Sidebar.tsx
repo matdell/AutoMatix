@@ -14,25 +14,24 @@ type NavItem = {
 
 const baseItems: NavItem[] = [
   { href: '/dashboard', label: 'Tablero', icon: 'dashboard' },
+  { href: '/comercios', label: 'Comercios (Marcas)', icon: 'storefront' },
   { href: '/campanas', label: 'Campanas', icon: 'campaign' },
-  { href: '/comercios', label: 'Comercios', icon: 'storefront' },
-  { href: '#', label: 'Puntos de venta', icon: 'location_on' },
   { href: '/invitaciones', label: 'Invitaciones', icon: 'mail' },
+  { href: '#', label: 'Auditoria', icon: 'history_edu' },
   { href: '/validaciones', label: 'Errores de Validacion', icon: 'report_problem' },
   { href: '/perfil', label: 'Perfil', icon: 'account_circle' },
-  { href: '#', label: 'Registros de Auditoria', icon: 'history_edu' },
 ];
 
 const superAdminItems: NavItem[] = [
   { href: '/superadmin/users', label: 'Usuarios', icon: 'group' },
-  { href: '/superadmin/banks', label: 'Bancos', icon: 'account_balance' },
+  { href: '/superadmin/banks', label: 'Bancos/Sucursales', icon: 'account_balance' },
   { href: '/superadmin/campaigns', label: 'Campanas', icon: 'campaign' },
-  { href: '/superadmin/brands', label: 'Marcas', icon: 'branding_watermark' },
+  { href: '/superadmin/brands', label: 'Comercios (Marcas)', icon: 'branding_watermark' },
 ];
 
 const centralSuperAdminItems: NavItem[] = [
   { href: '/superadmin/users', label: 'Usuarios', icon: 'group' },
-  { href: '/superadmin/banks', label: 'Bancos', icon: 'account_balance' },
+  { href: '/superadmin/banks', label: 'Bancos/Sucursales', icon: 'account_balance' },
   { href: '/perfil', label: 'Perfil', icon: 'account_circle' },
 ];
 
@@ -41,7 +40,7 @@ const bankAdminItems: NavItem[] = [
 ];
 
 const bankBranchItems: NavItem[] = [
-  { href: '/bank/branches', label: 'Sucursales', icon: 'store' },
+  { href: '/bank/branches', label: 'Bancos/Sucursales', icon: 'store' },
 ];
 
 const bankUserViewerRoles = new Set([
@@ -107,21 +106,31 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   }, [userRole]);
 
   const useCentralSuperAdminMenu = userRole === 'SUPERADMIN' && isCentralHost;
+  const orderedBankMenuItems = useMemo(() => {
+    const [dashboardItem, ...tailItems] = baseItems;
+    return [...bankAdminItems, ...bankBranchItems, dashboardItem, ...tailItems];
+  }, []);
+
+  const orderedSuperAdminBankMenuItems = useMemo(() => {
+    const [dashboardItem, ...tailItems] = baseItems;
+    return [dashboardItem, ...bankAdminItems, ...bankBranchItems, ...tailItems];
+  }, []);
+
   const primaryItems = useMemo(() => {
     if (useCentralSuperAdminMenu) {
       return centralSuperAdminItems;
     }
     if (userRole === 'SUPERADMIN' && !isCentralHost) {
-      return [...baseItems, ...bankAdminItems, ...bankBranchItems];
+      return orderedSuperAdminBankMenuItems;
     }
     if (userRole === 'BANK_ADMIN') {
-      return [...baseItems, ...bankAdminItems, ...bankBranchItems];
+      return orderedBankMenuItems;
     }
     if (userRole && bankUserViewerRoles.has(userRole)) {
-      return [...baseItems, ...bankAdminItems, ...bankBranchItems];
+      return orderedBankMenuItems;
     }
     return baseItems;
-  }, [useCentralSuperAdminMenu, userRole, isCentralHost]);
+  }, [useCentralSuperAdminMenu, userRole, isCentralHost, orderedBankMenuItems, orderedSuperAdminBankMenuItems]);
 
   const isActive = (href: string) => {
     if (!href || href === '#') return false;
