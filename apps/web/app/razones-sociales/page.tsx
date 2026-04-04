@@ -468,7 +468,7 @@ export default function RazonesSocialesPage() {
 
     resetBranchForm();
     setBranchTargetMerchant(merchant);
-    setBranchRetailerId(options[0].id);
+    setBranchRetailerId(options.length === 1 ? options[0].id : '');
     setShowBranchCreateModal(true);
   };
 
