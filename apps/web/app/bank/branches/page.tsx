@@ -3,7 +3,7 @@
 import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AppShell from '@/app/_components/AppShell';
-import { apiJson, getToken } from '@/lib/api';
+import { apiJson, clearToken, getToken } from '@/lib/api';
 
 type BankBranch = {
   id: string;
@@ -69,6 +69,7 @@ function Modal({ open, title, onClose, children }: ModalProps) {
 export default function BankBranchesPage() {
   const router = useRouter();
   const [role, setRole] = useState<string | null>(null);
+  const [roleResolved, setRoleResolved] = useState(false);
   const [branches, setBranches] = useState<BankBranch[]>([]);
   const [branchUsers, setBranchUsers] = useState<BranchUser[]>([]);
   const [loading, setLoading] = useState(false);
@@ -115,17 +116,27 @@ export default function BankBranchesPage() {
 
   useEffect(() => {
     if (!getToken()) {
+      setRoleResolved(true);
       router.push('/login');
       return;
     }
     const raw = window.localStorage.getItem('user');
-    if (!raw) return;
+    if (!raw) {
+      clearToken();
+      setRole(null);
+      setRoleResolved(true);
+      router.push('/login');
+      return;
+    }
     try {
       const parsed = JSON.parse(raw);
       setRole(parsed?.role ?? null);
     } catch {
+      clearToken();
       setRole(null);
+      router.push('/login');
     }
+    setRoleResolved(true);
   }, [router]);
 
   const toggleSelectBranch = (branchId: string) => {
@@ -388,7 +399,11 @@ export default function BankBranchesPage() {
       </header>
 
       <div className="pt-24 px-8 pb-12 space-y-6">
-        {!canView ? (
+        {!roleResolved ? (
+          <div className="text-sm text-on-surface-variant bg-surface-container-low/40 px-4 py-3 rounded-xl">
+            Cargando sesion...
+          </div>
+        ) : !canView ? (
           <div className="text-sm text-error bg-error-container/30 px-4 py-3 rounded-xl">
             No tienes permisos para acceder a esta seccion.
           </div>

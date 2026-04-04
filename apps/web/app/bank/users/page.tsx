@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AppShell from '@/app/_components/AppShell';
-import { apiJson, getToken } from '@/lib/api';
+import { apiJson, clearToken, getToken } from '@/lib/api';
 
 type BankBranch = {
   id: string;
@@ -84,6 +84,7 @@ const branchManagerRoleOptions = ['BANK_BRANCH_MANAGER', 'BANK_BRANCH_OPERATOR']
 export default function BankUsersPage() {
   const router = useRouter();
   const [role, setRole] = useState<string | null>(null);
+  const [roleResolved, setRoleResolved] = useState(false);
   const [actorBankBranchId, setActorBankBranchId] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [branches, setBranches] = useState<BankBranch[]>([]);
@@ -124,19 +125,30 @@ export default function BankUsersPage() {
 
   useEffect(() => {
     if (!getToken()) {
+      setRoleResolved(true);
       router.push('/login');
       return;
     }
     const raw = window.localStorage.getItem('user');
-    if (!raw) return;
+    if (!raw) {
+      clearToken();
+      setRole(null);
+      setActorBankBranchId(null);
+      setRoleResolved(true);
+      router.push('/login');
+      return;
+    }
     try {
       const parsed = JSON.parse(raw);
       setRole(parsed?.role ?? null);
       setActorBankBranchId(parsed?.bankBranchId ?? null);
     } catch {
+      clearToken();
       setRole(null);
       setActorBankBranchId(null);
+      router.push('/login');
     }
+    setRoleResolved(true);
   }, [router]);
 
   const loadUsers = async () => {
@@ -323,7 +335,11 @@ export default function BankUsersPage() {
       </header>
 
       <div className="pt-24 px-8 pb-12 space-y-6">
-        {!canView ? (
+        {!roleResolved ? (
+          <div className="text-sm text-on-surface-variant bg-surface-container-low/40 px-4 py-3 rounded-xl">
+            Cargando sesion...
+          </div>
+        ) : !canView ? (
           <div className="text-sm text-error bg-error-container/30 px-4 py-3 rounded-xl">
             No tienes permisos para acceder a esta seccion.
           </div>
