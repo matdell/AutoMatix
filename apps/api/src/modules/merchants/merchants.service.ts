@@ -12,6 +12,27 @@ type MerchantRetailerCacheValue = string | '__NONE__' | '__MULTI__';
 export class MerchantsService {
   constructor(private prisma: PrismaService, private audit: AuditService) {}
 
+  private async resolveMerchantCategory(tenantId: string, categoriaRaw: string) {
+    const categoria = categoriaRaw.trim();
+    if (!categoria) {
+      throw new BadRequestException('La categoria es obligatoria');
+    }
+    const category = await this.prisma.category.findFirst({
+      where: {
+        tenantId,
+        nombre: { equals: categoria, mode: 'insensitive' },
+      },
+      select: { nombre: true, activo: true },
+    });
+    if (!category) {
+      throw new BadRequestException('Categoria invalida');
+    }
+    if (!category.activo) {
+      throw new BadRequestException('La categoria seleccionada esta inactiva');
+    }
+    return category.nombre;
+  }
+
   async list(tenantId: string, filters?: { estado?: MerchantStatus; categoria?: string }) {
     return this.prisma.merchant.findMany({
       where: {
@@ -104,6 +125,7 @@ export class MerchantsService {
   }
 
   async create(tenantId: string, dto: CreateMerchantDto, actorId?: string) {
+    const categoria = await this.resolveMerchantCategory(tenantId, dto.categoria);
     const uniqueBrandIds = dto.brandIds ? Array.from(new Set(dto.brandIds)) : [];
     if (uniqueBrandIds.length) {
       const brands = await this.prisma.brand.findMany({
@@ -119,7 +141,7 @@ export class MerchantsService {
         tenantId,
         nombre: dto.nombre,
         razonSocial: dto.razonSocial,
-        categoria: dto.categoria,
+        categoria,
         estado: dto.estado ?? MerchantStatus.PENDING,
         cuit: dto.cuit,
         direccionSocial: dto.direccionSocial,
@@ -175,12 +197,16 @@ export class MerchantsService {
         throw new BadRequestException('Marca invalida');
       }
     }
+    const categoria =
+      dto.categoria !== undefined
+        ? await this.resolveMerchantCategory(tenantId, dto.categoria)
+        : undefined;
     const merchant = await this.prisma.merchant.update({
       where: { id },
       data: {
         nombre: dto.nombre ?? undefined,
         razonSocial: dto.razonSocial ?? undefined,
-        categoria: dto.categoria ?? undefined,
+        categoria,
         estado: dto.estado ?? undefined,
         cuit: dto.cuit ?? undefined,
         direccionSocial: dto.direccionSocial ?? undefined,

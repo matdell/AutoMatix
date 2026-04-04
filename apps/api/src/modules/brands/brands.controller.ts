@@ -50,7 +50,7 @@ export class BrandsController {
   }
 
   @Patch(':id')
-  @Roles(Role.SUPERADMIN, Role.BRAND_ADMIN)
+  @Roles(Role.SUPERADMIN, Role.BANK_ADMIN, Role.BRAND_ADMIN)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateBrandDto,
@@ -76,7 +76,7 @@ export class BrandsController {
   }
 
   @Post(':id/legal-entities')
-  @Roles(Role.SUPERADMIN, Role.BRAND_ADMIN)
+  @Roles(Role.SUPERADMIN, Role.BANK_ADMIN, Role.BRAND_ADMIN)
   async linkLegalEntity(
     @Param('id') brandId: string,
     @Body() body: { merchantId: string },
@@ -91,7 +91,7 @@ export class BrandsController {
   }
 
   @Delete(':id/legal-entities/:merchantId')
-  @Roles(Role.SUPERADMIN, Role.BRAND_ADMIN)
+  @Roles(Role.SUPERADMIN, Role.BANK_ADMIN, Role.BRAND_ADMIN)
   async unlinkLegalEntity(
     @Param('id') brandId: string,
     @Param('merchantId') merchantId: string,

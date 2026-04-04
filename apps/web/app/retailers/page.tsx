@@ -5,6 +5,23 @@ import { useRouter } from 'next/navigation';
 import AppShell from '@/app/_components/AppShell';
 import { apiJson, clearToken, getToken } from '@/lib/api';
 
+type Category = {
+  id: string;
+  nombre: string;
+  activo: boolean;
+};
+
+type BrandCategory = {
+  category: Category;
+};
+
+type Brand = {
+  id: string;
+  nombre: string;
+  activo: boolean;
+  categories?: BrandCategory[];
+};
+
 type MerchantBrandLink = {
   brandId: string;
   brand?: {
@@ -23,16 +40,11 @@ type Merchant = {
   brands?: MerchantBrandLink[];
 };
 
-type Brand = {
-  id: string;
-  nombre: string;
-  activo: boolean;
-};
-
 type RetailerRow = {
   id: string;
   nombre: string;
   activo: boolean;
+  categoria: string | null;
   merchants: Merchant[];
 };
 
@@ -78,6 +90,10 @@ function merchantStatusBadge(status?: string) {
   return 'bg-secondary-container text-on-secondary-container';
 }
 
+function brandCategoryName(brand?: Brand) {
+  return brand?.categories?.[0]?.category?.nombre ?? null;
+}
+
 function buildRetailerRows(merchants: Merchant[], knownBrands: Brand[]) {
   const byBrand = new Map<string, RetailerRow>();
 
@@ -86,6 +102,7 @@ function buildRetailerRows(merchants: Merchant[], knownBrands: Brand[]) {
       id: brand.id,
       nombre: brand.nombre,
       activo: brand.activo,
+      categoria: brandCategoryName(brand),
       merchants: [],
     });
   }
@@ -101,6 +118,7 @@ function buildRetailerRows(merchants: Merchant[], knownBrands: Brand[]) {
           id: '__no_brand__',
           nombre: 'Sin retailer',
           activo: true,
+          categoria: null,
           merchants: [merchant],
         });
       }
@@ -120,6 +138,7 @@ function buildRetailerRows(merchants: Merchant[], knownBrands: Brand[]) {
           id: link.brand.id,
           nombre: link.brand.nombre,
           activo: link.brand.activo,
+          categoria: null,
           merchants: [merchant],
         });
       }
@@ -132,10 +151,15 @@ function buildRetailerRows(merchants: Merchant[], knownBrands: Brand[]) {
 export default function RetailersPage() {
   const router = useRouter();
   const [role, setRole] = useState<string | null>(null);
+  const [actorBrandId, setActorBrandId] = useState<string | null>(null);
   const [roleResolved, setRoleResolved] = useState(false);
+
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -143,12 +167,11 @@ export default function RetailersPage() {
   const [expandedRetailerId, setExpandedRetailerId] = useState<string | null>(null);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingRetailerId, setEditingRetailerId] = useState<string | null>(null);
+
   const [retailerNombre, setRetailerNombre] = useState('');
-  const [retailerSitioWeb, setRetailerSitioWeb] = useState('');
-  const [retailerEmail, setRetailerEmail] = useState('');
-  const [retailerTelefono, setRetailerTelefono] = useState('');
-  const [retailerProcessor, setRetailerProcessor] = useState('');
+  const [retailerCategoriaId, setRetailerCategoriaId] = useState('');
   const [retailerActivo, setRetailerActivo] = useState(true);
 
   const canView =
@@ -161,7 +184,8 @@ export default function RetailersPage() {
     role === 'MERCHANT_ADMIN' ||
     role === 'MERCHANT_USER';
 
-  const canCreate = role === 'SUPERADMIN' || role === 'BANK_ADMIN';
+  const canManageRetailers = role === 'SUPERADMIN' || role === 'BANK_ADMIN' || role === 'BRAND_ADMIN';
+  const canCreateRetailers = role === 'SUPERADMIN' || role === 'BANK_ADMIN';
   const canListBrands = role === 'SUPERADMIN' || role === 'BANK_ADMIN' || role === 'BRAND_ADMIN';
 
   useEffect(() => {
@@ -170,22 +194,28 @@ export default function RetailersPage() {
       router.push('/login');
       return;
     }
+
     const raw = window.localStorage.getItem('user');
     if (!raw) {
       clearToken();
       setRole(null);
+      setActorBrandId(null);
       setRoleResolved(true);
       router.push('/login');
       return;
     }
+
     try {
       const parsed = JSON.parse(raw);
       setRole(parsed?.role ?? null);
+      setActorBrandId(parsed?.brandId ?? null);
     } catch {
       clearToken();
       setRole(null);
+      setActorBrandId(null);
       router.push('/login');
     }
+
     setRoleResolved(true);
   }, [router]);
 
@@ -194,12 +224,20 @@ export default function RetailersPage() {
     setError(null);
     try {
       const merchantsPromise = apiJson<Merchant[]>('/merchants');
-      const brandsPromise = canListBrands
-        ? apiJson<Brand[]>('/brands').catch(() => [])
-        : Promise.resolve<Brand[]>([]);
-      const [merchantData, brandData] = await Promise.all([merchantsPromise, brandsPromise]);
+      const brandsPromise = canListBrands ? apiJson<Brand[]>('/brands').catch(() => []) : Promise.resolve<Brand[]>([]);
+      const categoriesPromise = canManageRetailers
+        ? apiJson<Category[]>('/categories').catch(() => [])
+        : Promise.resolve<Category[]>([]);
+
+      const [merchantData, brandData, categoryData] = await Promise.all([
+        merchantsPromise,
+        brandsPromise,
+        categoriesPromise,
+      ]);
+
       setMerchants(merchantData);
       setBrands(brandData);
+      setCategories(categoryData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudieron cargar los retailers');
     } finally {
@@ -210,11 +248,32 @@ export default function RetailersPage() {
   useEffect(() => {
     if (!canView) return;
     void loadData();
-  }, [canView, canListBrands]);
+  }, [canView, canListBrands, canManageRetailers]);
 
   useEffect(() => {
     setExpandedRetailerId(null);
   }, [search]);
+
+  const brandById = useMemo(() => {
+    const map = new Map<string, Brand>();
+    for (const brand of brands) {
+      map.set(brand.id, brand);
+    }
+    return map;
+  }, [brands]);
+
+  const categoryById = useMemo(() => {
+    const map = new Map<string, Category>();
+    for (const category of categories) {
+      map.set(category.id, category);
+    }
+    return map;
+  }, [categories]);
+
+  const activeCategories = useMemo(
+    () => categories.filter((category) => category.activo).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
+    [categories],
+  );
 
   const retailerRows = useMemo(() => buildRetailerRows(merchants, brands), [merchants, brands]);
 
@@ -224,6 +283,7 @@ export default function RetailersPage() {
     if (!normalizedSearch) return retailerRows;
     return retailerRows.filter((row) => {
       if (row.nombre.toLowerCase().includes(normalizedSearch)) return true;
+      if (row.categoria?.toLowerCase().includes(normalizedSearch)) return true;
       return row.merchants.some((merchant) => {
         const text = `${merchantDisplayName(merchant)} ${merchant.cuit || ''}`.toLowerCase();
         return text.includes(normalizedSearch);
@@ -234,44 +294,102 @@ export default function RetailersPage() {
   const totalRetailers = retailerRows.filter((row) => row.id !== '__no_brand__').length;
   const merchantsWithoutRetailer = merchants.filter((merchant) => (merchant.brands || []).length === 0).length;
 
-  const resetRetailerForm = () => {
-    setRetailerNombre('');
-    setRetailerSitioWeb('');
-    setRetailerEmail('');
-    setRetailerTelefono('');
-    setRetailerProcessor('');
-    setRetailerActivo(true);
+  const canEditRow = (row: RetailerRow) => {
+    if (row.id === '__no_brand__') return false;
+    if (!canManageRetailers) return false;
+    if (role === 'BRAND_ADMIN') return row.id === actorBrandId;
+    return true;
   };
 
-  const onCreateRetailer = async (event: FormEvent<HTMLFormElement>) => {
+  const resetRetailerForm = () => {
+    setRetailerNombre('');
+    setRetailerCategoriaId('');
+    setRetailerActivo(true);
+    setEditingRetailerId(null);
+  };
+
+  const openCreate = () => {
+    resetRetailerForm();
+    setShowCreateModal(true);
+  };
+
+  const openEdit = (row: RetailerRow) => {
+    const brand = brandById.get(row.id);
+    setEditingRetailerId(row.id);
+    setRetailerNombre(row.nombre);
+    setRetailerActivo(row.activo);
+
+    if (brand?.categories?.[0]?.category?.nombre) {
+      const match = categories.find(
+        (category) => category.nombre.toLowerCase() === brand.categories?.[0]?.category?.nombre.toLowerCase(),
+      );
+      setRetailerCategoriaId(match?.id ?? '');
+    } else {
+      setRetailerCategoriaId('');
+    }
+
+    setShowEditModal(true);
+  };
+
+  const saveRetailer = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canCreate) return;
+
+    const category = categoryById.get(retailerCategoriaId);
+    if (!category) {
+      setError('La categoria es obligatoria para el retailer');
+      return;
+    }
 
     setSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
-      await apiJson('/brands', {
-        method: 'POST',
-        body: JSON.stringify({
-          nombre: retailerNombre.trim(),
-          sitioWeb: retailerSitioWeb.trim() || undefined,
-          emailPrincipal: retailerEmail.trim() || undefined,
-          telefonoPrincipal: retailerTelefono.trim() || undefined,
-          processor: retailerProcessor.trim() || undefined,
-          activo: retailerActivo,
-        }),
-      });
+      const payload = {
+        nombre: retailerNombre.trim(),
+        activo: retailerActivo,
+        rubros: [category.nombre],
+      };
 
-      setSuccess('Retailer creado correctamente.');
+      if (showCreateModal) {
+        await apiJson('/brands', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        setSuccess('Retailer creado correctamente.');
+      } else if (showEditModal && editingRetailerId) {
+        await apiJson(`/brands/${editingRetailerId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+        setSuccess('Retailer actualizado correctamente.');
+      }
+
       setShowCreateModal(false);
+      setShowEditModal(false);
       resetRetailerForm();
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo crear el retailer');
+      setError(err instanceof Error ? err.message : 'No se pudo guardar el retailer');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleRetailerStatus = async (row: RetailerRow) => {
+    if (!canEditRow(row)) return;
+
+    setError(null);
+    setSuccess(null);
+    try {
+      await apiJson(`/brands/${row.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ activo: !row.activo }),
+      });
+      setSuccess(row.activo ? 'Retailer dado de baja.' : 'Retailer reactivado.');
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar el retailer');
     }
   };
 
@@ -279,14 +397,11 @@ export default function RetailersPage() {
     <AppShell>
       <header className="fixed top-0 left-[var(--sidebar-width)] right-0 h-16 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/15 flex items-center justify-between px-8 shadow-[0px_12px_32px_rgba(42,52,57,0.06)] font-['Inter'] antialiased tracking-tight">
         <h1 className="text-lg font-extrabold text-slate-900 tracking-tighter">Retailers</h1>
-        {canCreate ? (
+        {canCreateRetailers ? (
           <button
             className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-700 hover:border-slate-300"
             type="button"
-            onClick={() => {
-              resetRetailerForm();
-              setShowCreateModal(true);
-            }}
+            onClick={openCreate}
           >
             Nuevo retailer
           </button>
@@ -322,11 +437,11 @@ export default function RetailersPage() {
 
             <section className="bg-surface-container-lowest rounded-2xl p-6 shadow-[0px_12px_32px_rgba(42,52,57,0.06)] space-y-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="text-sm text-on-surface-variant">Expande un retailer para ver sus razones sociales.</div>
+                <div className="text-sm text-on-surface-variant">Expande un retailer para ver sus razones sociales vinculadas.</div>
                 <input
                   type="text"
                   className="w-full md:w-96 bg-surface-container-low border-none rounded-xl px-4 py-2 text-sm"
-                  placeholder="Buscar retailer, razon social o CUIT..."
+                  placeholder="Buscar retailer, categoria, razon social o CUIT..."
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                 />
@@ -338,27 +453,33 @@ export default function RetailersPage() {
                     <tr className="bg-surface-container-low/50">
                       <th className="px-4 py-3 w-10">&nbsp;</th>
                       <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Retailer</th>
+                      <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Categoria</th>
                       <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Razones sociales</th>
                       <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Estado</th>
+                      {canManageRetailers ? (
+                        <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant text-right">Acciones</th>
+                      ) : null}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {loading ? (
                       <tr>
-                        <td colSpan={4} className="px-4 py-6 text-sm text-on-surface-variant">
+                        <td colSpan={canManageRetailers ? 6 : 5} className="px-4 py-6 text-sm text-on-surface-variant">
                           Cargando retailers...
                         </td>
                       </tr>
                     ) : null}
                     {!loading && filteredRetailerRows.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-4 py-6 text-sm text-on-surface-variant">
+                        <td colSpan={canManageRetailers ? 6 : 5} className="px-4 py-6 text-sm text-on-surface-variant">
                           No hay resultados para este filtro.
                         </td>
                       </tr>
                     ) : null}
                     {filteredRetailerRows.map((row) => {
                       const expanded = expandedRetailerId === row.id;
+                      const editable = canEditRow(row);
+
                       return (
                         <Fragment key={row.id}>
                           <tr className="hover:bg-surface-container-low transition-colors">
@@ -375,6 +496,7 @@ export default function RetailersPage() {
                               </button>
                             </td>
                             <td className="px-4 py-3 text-sm text-on-surface font-semibold">{row.nombre}</td>
+                            <td className="px-4 py-3 text-sm text-on-surface-variant">{row.categoria || '-'}</td>
                             <td className="px-4 py-3 text-sm text-on-surface-variant">{row.merchants.length}</td>
                             <td className="px-4 py-3">
                               <span
@@ -389,10 +511,32 @@ export default function RetailersPage() {
                                 {row.id === '__no_brand__' ? 'N/A' : row.activo ? 'Activa' : 'Inactiva'}
                               </span>
                             </td>
+                            {canManageRetailers ? (
+                              <td className="px-4 py-3">
+                                {editable ? (
+                                  <div className="flex items-center justify-end gap-3">
+                                    <button
+                                      type="button"
+                                      className="text-xs font-bold text-primary hover:underline"
+                                      onClick={() => openEdit(row)}
+                                    >
+                                      Editar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="text-xs font-bold text-slate-700 hover:underline"
+                                      onClick={() => toggleRetailerStatus(row)}
+                                    >
+                                      {row.activo ? 'Baja' : 'Reactivar'}
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </td>
+                            ) : null}
                           </tr>
                           {expanded ? (
                             <tr>
-                              <td colSpan={4} className="px-4 pb-4">
+                              <td colSpan={canManageRetailers ? 6 : 5} className="px-4 pb-4">
                                 <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-4">
                                   <div className="mb-3 text-sm font-semibold text-slate-900">Razones sociales vinculadas</div>
                                   {row.merchants.length === 0 ? (
@@ -434,7 +578,13 @@ export default function RetailersPage() {
       </div>
 
       <Modal open={showCreateModal} title="Crear retailer" onClose={() => setShowCreateModal(false)}>
-        <form onSubmit={onCreateRetailer} className="space-y-4">
+        <form onSubmit={saveRetailer} className="space-y-4">
+          {activeCategories.length === 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              No hay categorias activas. Configuralas en Configuracion.
+            </div>
+          ) : null}
+
           <div>
             <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Nombre *</label>
             <input
@@ -444,41 +594,24 @@ export default function RetailersPage() {
               required
             />
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Sitio web</label>
-              <input
-                className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
-                value={retailerSitioWeb}
-                onChange={(event) => setRetailerSitioWeb(event.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Email</label>
-              <input
-                type="email"
-                className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
-                value={retailerEmail}
-                onChange={(event) => setRetailerEmail(event.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Telefono</label>
-              <input
-                className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
-                value={retailerTelefono}
-                onChange={(event) => setRetailerTelefono(event.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Processor</label>
-              <input
-                className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
-                value={retailerProcessor}
-                onChange={(event) => setRetailerProcessor(event.target.value)}
-              />
-            </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Categoria *</label>
+            <select
+              className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
+              value={retailerCategoriaId}
+              onChange={(event) => setRetailerCategoriaId(event.target.value)}
+              required
+            >
+              <option value="">Seleccionar categoria</option>
+              {activeCategories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.nombre}
+                </option>
+              ))}
+            </select>
           </div>
+
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input
               type="checkbox"
@@ -501,9 +634,74 @@ export default function RetailersPage() {
             <button
               type="submit"
               className="rounded-full bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white disabled:opacity-60"
-              disabled={saving}
+              disabled={saving || activeCategories.length === 0}
             >
               {saving ? 'Guardando...' : 'Crear'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={showEditModal} title="Editar retailer" onClose={() => setShowEditModal(false)}>
+        <form onSubmit={saveRetailer} className="space-y-4">
+          {activeCategories.length === 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              No hay categorias activas. Configuralas en Configuracion.
+            </div>
+          ) : null}
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Nombre *</label>
+            <input
+              className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
+              value={retailerNombre}
+              onChange={(event) => setRetailerNombre(event.target.value)}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Categoria *</label>
+            <select
+              className="mt-1 w-full rounded-xl bg-surface-container-low px-4 py-2 text-sm"
+              value={retailerCategoriaId}
+              onChange={(event) => setRetailerCategoriaId(event.target.value)}
+              required
+            >
+              <option value="">Seleccionar categoria</option>
+              {activeCategories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-primary"
+              checked={retailerActivo}
+              onChange={(event) => setRetailerActivo(event.target.checked)}
+            />
+            Retailer activo
+          </label>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-700"
+              onClick={() => setShowEditModal(false)}
+              disabled={saving}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="rounded-full bg-primary px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white disabled:opacity-60"
+              disabled={saving || activeCategories.length === 0}
+            >
+              {saving ? 'Guardando...' : 'Guardar'}
             </button>
           </div>
         </form>

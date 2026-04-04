@@ -52,10 +52,7 @@ const bankUserViewerRoles = new Set([
   'BANK_BRANCH_OPERATOR',
 ]);
 
-const footerItems: NavItem[] = [
-  { href: '#', label: 'Configuracion', icon: 'settings' },
-  { href: '#', label: 'Soporte', icon: 'contact_support' },
-];
+const footerBaseItems: NavItem[] = [{ href: '#', label: 'Soporte', icon: 'contact_support' }];
 
 type SidebarProps = {
   collapsed: boolean;
@@ -167,6 +164,13 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     ].join(' ');
 
   const superAdminActive = superAdminItems.some((item) => isActive(item.href));
+  const footerItems = useMemo(() => {
+    const items = [...footerBaseItems];
+    if (userRole === 'BANK_ADMIN') {
+      items.unshift({ href: '/configuracion/categorias', label: 'Configuracion', icon: 'settings' });
+    }
+    return items;
+  }, [userRole]);
 
   const handleLogout = () => {
     clearToken();
@@ -264,7 +268,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {footerItems.map((item) => (
           <a
             key={item.label}
-            className={linkClassName(false)}
+            className={linkClassName(isActive(item.href))}
             href={item.href}
             title={collapsed ? item.label : undefined}
           >

@@ -52,6 +52,9 @@ export class BrandsService {
 
   async create(tenantId: string, dto: CreateBrandDto, actorId?: string) {
     const rubros = this.normalizeRubros(dto.rubros);
+    if (rubros.length === 0) {
+      throw new BadRequestException('La categoria es obligatoria para el retailer');
+    }
     const brand = await this.prisma.brand.create({
       data: {
         tenantId,
@@ -117,6 +120,9 @@ export class BrandsService {
       throw new NotFoundException('Marca no encontrada');
     }
     const rubros = dto.rubros ? this.normalizeRubros(dto.rubros) : null;
+    if (rubros && rubros.length === 0) {
+      throw new BadRequestException('La categoria es obligatoria para el retailer');
+    }
     const brand = await this.prisma.brand.update({
       where: { id },
       data: {
@@ -195,20 +201,28 @@ export class BrandsService {
   }
 
   private async ensureCategories(tenantId: string, rubros: string[]) {
-    const existing = await this.prisma.category.findMany({
-      where: { tenantId, nombre: { in: rubros } },
+    const categories = await this.prisma.category.findMany({
+      where: { tenantId },
     });
-    const existingNames = new Set(existing.map((category) => category.nombre));
-    const missing = rubros.filter((rubro) => !existingNames.has(rubro));
-    if (missing.length) {
-      await this.prisma.category.createMany({
-        data: missing.map((nombre) => ({ tenantId, nombre })),
-        skipDuplicates: true,
-      });
+    const categoryByName = new Map(
+      categories.map((category) => [category.nombre.toLowerCase(), category] as const),
+    );
+
+    const resolved: typeof categories = [];
+    const seen = new Set<string>();
+
+    for (const rubro of rubros) {
+      const key = rubro.toLowerCase();
+      if (seen.has(key)) continue;
+      const category = categoryByName.get(key);
+      if (!category) {
+        throw new BadRequestException(`Categoria invalida: ${rubro}`);
+      }
+      seen.add(key);
+      resolved.push(category);
     }
-    return this.prisma.category.findMany({
-      where: { tenantId, nombre: { in: rubros } },
-    });
+
+    return resolved;
   }
 
   async remove(tenantId: string, id: string, actorId?: string) {

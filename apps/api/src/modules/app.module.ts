@@ -18,6 +18,7 @@ import { PlacesModule } from './places/places.module';
 import { DocusignModule } from './docusign/docusign.module';
 import { BankProvisioningModule } from './bank-provisioning/bank-provisioning.module';
 import { RateLimitModule } from './common/rate-limit.module';
+import { CategoriesModule } from './categories/categories.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { RateLimitModule } from './common/rate-limit.module';
     PlacesModule,
     DocusignModule,
     BankProvisioningModule,
+    CategoriesModule,
   ],
 })
 export class AppModule {}
