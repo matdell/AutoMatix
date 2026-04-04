@@ -14,7 +14,8 @@ type NavItem = {
 
 const baseItems: NavItem[] = [
   { href: '/dashboard', label: 'Tablero', icon: 'dashboard' },
-  { href: '/comercios', label: 'Comercios (Marcas)', icon: 'storefront' },
+  { href: '/retailers', label: 'Retailers', icon: 'storefront' },
+  { href: '/razones-sociales', label: 'Razones sociales', icon: 'domain' },
   { href: '/campanas', label: 'Campanas', icon: 'campaign' },
   { href: '/invitaciones', label: 'Invitaciones', icon: 'mail' },
   { href: '#', label: 'Auditoria', icon: 'history_edu' },
