@@ -58,6 +58,7 @@ const configurationItems: NavItem[] = [
   { href: '/configuracion/codigos-comercio', label: 'Codigos Comercio', icon: 'credit_card' },
   { href: '/configuracion/shoppings', label: 'Shoppings', icon: 'local_mall' },
   { href: '/configuracion/procesadores', label: 'Procesadores', icon: 'hub' },
+  { href: '/configuracion/bines', label: 'BINES', icon: 'pin' },
   { href: '/configuracion/tipos-campania', label: 'Tipos Campana', icon: 'list_alt' },
 ];
 
