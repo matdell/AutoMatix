@@ -7,12 +7,16 @@ import { CampaignStatus, Role } from '@prisma/client';
 import { CurrentUser } from '../common/current-user.decorator';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
+import { CampaignFormGenerationService } from './campaign-form-generation.service';
 
 @Controller('campaigns')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.BANK_ADMIN, Role.BANK_OPS)
 export class CampaignsController {
-  constructor(private campaignsService: CampaignsService) {}
+  constructor(
+    private campaignsService: CampaignsService,
+    private campaignFormGenerationService: CampaignFormGenerationService,
+  ) {}
 
   @Get()
   async list(
@@ -39,6 +43,15 @@ export class CampaignsController {
   @Get('export/csv')
   async exportCsv(@CurrentUser() user: { tenantId: string }) {
     return this.campaignsService.exportCsv(user.tenantId);
+  }
+
+  @Get(':id/generated-forms')
+  async generatedForms(
+    @Param('id') id: string,
+    @CurrentUser() user: { tenantId: string },
+    @Query('merchantId') merchantId?: string,
+  ) {
+    return this.campaignFormGenerationService.listByCampaign(user.tenantId, id, merchantId);
   }
 
   @Get(':id')

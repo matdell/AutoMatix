@@ -156,6 +156,7 @@ model Bank {
   campaignTypeConfigs  BankCampaignTypeConfig[]
   binConfigs           BankBinConfig[]
   campaigns            Campaign[]
+  generatedCampaignForms CampaignGeneratedForm[]
   invitations          Invitation[]
   validations          ValidationError[]
   notifications        Notification[]
@@ -317,6 +318,7 @@ model Merchant {
   validations ValidationError[]
   users       User[]
   campaignAdhesions CampaignMerchantAdhesion[]
+  generatedCampaignForms CampaignGeneratedForm[]
 
   @@index([tenantId])
 }
@@ -486,6 +488,7 @@ model Campaign {
   paymentMethods   CampaignPaymentMethod[]
   processorCodes   CampaignProcessorCode[]
   merchantAdhesions CampaignMerchantAdhesion[]
+  generatedForms   CampaignGeneratedForm[]
 
   @@index([tenantId])
   @@index([tenantId, estado])
@@ -629,6 +632,35 @@ model CampaignMerchantAdhesion {
   @@index([tenantId, status])
 }
 
+model CampaignGeneratedForm {
+  id           String   @id @default(cuid())
+  tenantId     String
+  campaignId   String
+  merchantId   String
+  invitationId String?
+  processor    String
+  campaignType String
+  formTemplate String
+  mainForm     Json
+  binsSheet    Json
+  merchantsSheet Json
+  financingSheet Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  bank       Bank       @relation(fields: [tenantId], references: [id])
+  campaign   Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  merchant   Merchant   @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  invitation Invitation? @relation(fields: [invitationId], references: [id], onDelete: SetNull)
+
+  @@unique([campaignId, merchantId, processor, formTemplate])
+  @@index([tenantId])
+  @@index([campaignId])
+  @@index([merchantId])
+  @@index([invitationId])
+  @@index([tenantId, processor])
+}
+
 model BankBinConfig {
   id        String   @id @default(cuid())
   tenantId  String
@@ -667,6 +699,7 @@ model Invitation {
   updatedAt  DateTime         @updatedAt
 
   branches InvitationBranch[]
+  generatedCampaignForms CampaignGeneratedForm[]
 
   @@index([tenantId])
 }

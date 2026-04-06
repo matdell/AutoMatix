@@ -7,6 +7,7 @@ import { AuditAction, InvitationStatus, MerchantStatus, Role } from '@prisma/cli
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CampaignFormGenerationService } from '../campaigns/campaign-form-generation.service';
 
 @Injectable()
 export class InvitationsService {
@@ -14,6 +15,7 @@ export class InvitationsService {
     private prisma: PrismaService,
     private audit: AuditService,
     private notifications: NotificationsService,
+    private campaignFormGeneration: CampaignFormGenerationService,
   ) {}
 
   async list(tenantId: string) {
@@ -131,7 +133,40 @@ export class InvitationsService {
       after: { status: updated.status },
     });
 
-    return { ok: true };
+    let formGeneration:
+      | Awaited<ReturnType<CampaignFormGenerationService['generateForMerchantInvitationAcceptance']>>
+      | null = null;
+    let formGenerationError: string | null = null;
+
+    try {
+      formGeneration = await this.campaignFormGeneration.generateForMerchantInvitationAcceptance({
+        tenantId: invitation.tenantId,
+        merchantId,
+        invitationId: invitation.id,
+        invitationBranchIds: invitation.branches.map((branch) => branch.branchId),
+      });
+    } catch (error) {
+      formGenerationError =
+        error instanceof Error ? error.message : 'Error inesperado al generar formularios de campana';
+      await this.audit.log({
+        tenantId: invitation.tenantId,
+        action: AuditAction.UPDATE,
+        entity: 'CampaignGeneratedForm',
+        entityId: invitation.id,
+        after: {
+          invitationId: invitation.id,
+          merchantId,
+          status: 'FAILED',
+          message: formGenerationError,
+        },
+      });
+    }
+
+    return {
+      ok: true,
+      formGeneration,
+      formGenerationError,
+    };
   }
 
   async reject(token: string, email: string) {
