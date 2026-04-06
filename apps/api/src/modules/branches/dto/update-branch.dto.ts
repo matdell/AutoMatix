@@ -1,4 +1,6 @@
-import { IsOptional, IsString, IsNumber } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsBoolean, IsOptional, IsString, IsNumber, ValidateNested } from 'class-validator';
+import { BranchEstablishmentInputDto } from './branch-establishment-input.dto';
 
 export class UpdateBranchDto {
   @IsOptional()
@@ -58,10 +60,24 @@ export class UpdateBranchDto {
   processor?: string;
 
   @IsOptional()
+  @IsBoolean()
+  activo?: boolean;
+
+  @IsOptional()
   @IsString()
   shoppingId?: string;
 
   @IsOptional()
   @IsString()
+  shoppingNombre?: string;
+
+  @IsOptional()
+  @IsString()
   retailerId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BranchEstablishmentInputDto)
+  establishments?: BranchEstablishmentInputDto[];
 }

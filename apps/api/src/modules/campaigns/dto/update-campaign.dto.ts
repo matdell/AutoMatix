@@ -1,15 +1,19 @@
-import { IsArray, IsDateString, IsEnum, IsOptional, IsString, ValidateNested } from 'class-validator';
-import { CampaignStatus, CampaignType } from '@prisma/client';
+import {
+  IsArray,
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
+import { CampaignCloseType, CampaignCommercialStatus, CampaignLocationLevel } from '@prisma/client';
 import { Type } from 'class-transformer';
-
-class CampaignTargetDto {
-  @IsString()
-  merchantId: string;
-
-  @IsOptional()
-  @IsString()
-  branchId?: string;
-}
+import {
+  CampaignEligibilityDto,
+  CampaignMerchantAdhesionDto,
+  CampaignProcessorCodeDto,
+} from './create-campaign.dto';
 
 export class UpdateCampaignDto {
   @IsOptional()
@@ -17,20 +21,87 @@ export class UpdateCampaignDto {
   nombre?: string;
 
   @IsOptional()
-  @IsEnum(CampaignType)
-  tipo?: CampaignType;
+  @IsString()
+  campaignTypeConfigId?: string;
 
   @IsOptional()
-  @IsEnum(CampaignStatus)
-  estado?: CampaignStatus;
+  @IsEnum(CampaignCloseType)
+  closeType?: CampaignCloseType;
+
+  @IsOptional()
+  @IsEnum(CampaignCommercialStatus)
+  commercialStatus?: CampaignCommercialStatus;
+
+  @IsOptional()
+  @IsString()
+  codigoInterno?: string;
+
+  @IsOptional()
+  @IsString()
+  codigoExterno?: string;
 
   @IsOptional()
   @IsDateString()
-  fechaInicio?: string;
+  fechaVigDesde?: string;
 
   @IsOptional()
   @IsDateString()
-  fechaFin?: string;
+  fechaVigHasta?: string;
+
+  @IsOptional()
+  @IsDateString()
+  fechaCierre?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  dias?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  tienePrioridad?: boolean;
+
+  @IsOptional()
+  @IsDateString()
+  fechaPrioridad?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  paymentMethodIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  retailerIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  branchIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  categoryIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  shoppingIds?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  targetAllShoppings?: boolean;
+
+  @IsOptional()
+  @IsEnum(CampaignLocationLevel)
+  locationLevel?: CampaignLocationLevel;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  locationValues?: string[];
 
   @IsOptional()
   condiciones?: Record<string, unknown>;
@@ -38,6 +109,17 @@ export class UpdateCampaignDto {
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CampaignTargetDto)
-  targets?: CampaignTargetDto[];
+  @Type(() => CampaignProcessorCodeDto)
+  processorCodes?: CampaignProcessorCodeDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CampaignMerchantAdhesionDto)
+  adhesiones?: CampaignMerchantAdhesionDto[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CampaignEligibilityDto)
+  eligibility?: CampaignEligibilityDto;
 }

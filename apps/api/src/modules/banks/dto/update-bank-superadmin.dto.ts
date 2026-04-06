@@ -46,4 +46,8 @@ export class UpdateBankSuperadminDto {
   @IsOptional()
   @IsBoolean()
   activo?: boolean;
+
+  @IsOptional()
+  @IsString()
+  timezone?: string;
 }

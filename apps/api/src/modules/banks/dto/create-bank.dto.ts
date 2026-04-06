@@ -48,6 +48,10 @@ export class CreateBankDto {
   @IsDateString()
   fechaAlta?: string;
 
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+
   @IsString()
   @IsNotEmpty()
   adminNombre: string;

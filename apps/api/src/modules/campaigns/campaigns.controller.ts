@@ -63,6 +63,38 @@ export class CampaignsController {
     return this.campaignsService.archive(user.tenantId, id, user.userId);
   }
 
+  @Post(':id/submit')
+  async submit(
+    @Param('id') id: string,
+    @CurrentUser() user: { tenantId: string; userId: string },
+  ) {
+    return this.campaignsService.transition(user.tenantId, id, CampaignStatus.PENDING, user.userId);
+  }
+
+  @Post(':id/activate')
+  async activate(
+    @Param('id') id: string,
+    @CurrentUser() user: { tenantId: string; userId: string },
+  ) {
+    return this.campaignsService.transition(user.tenantId, id, CampaignStatus.ACTIVE, user.userId);
+  }
+
+  @Post(':id/reopen')
+  async reopen(
+    @Param('id') id: string,
+    @CurrentUser() user: { tenantId: string; userId: string },
+  ) {
+    return this.campaignsService.transition(user.tenantId, id, CampaignStatus.EDITING, user.userId);
+  }
+
+  @Post(':id/cancel')
+  async cancel(
+    @Param('id') id: string,
+    @CurrentUser() user: { tenantId: string; userId: string },
+  ) {
+    return this.campaignsService.transition(user.tenantId, id, CampaignStatus.CANCELLED, user.userId);
+  }
+
   @Post(':id/restore')
   async restore(
     @Param('id') id: string,

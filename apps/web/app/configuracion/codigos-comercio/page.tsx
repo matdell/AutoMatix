@@ -6,19 +6,31 @@ import AppShell from '@/app/_components/AppShell';
 import { apiJson } from '@/lib/api';
 import { useConfigAccess } from '../_access';
 
-type CategoryItem = {
+type CardCodeConfig = {
   id: string;
-  nombre: string;
-  activo: boolean;
+  network: 'VISA' | 'MASTERCARD' | 'AMEX' | 'CABAL' | 'NARANJA' | 'OTRA' | string;
+  label: string;
+  active: boolean;
+  sortOrder: number;
 };
 
-export default function ConfiguracionCategoriasPage() {
+const networkOptions: Array<{ value: CardCodeConfig['network']; label: string }> = [
+  { value: 'VISA', label: 'Visa' },
+  { value: 'MASTERCARD', label: 'Mastercard' },
+  { value: 'AMEX', label: 'American Express' },
+  { value: 'CABAL', label: 'Cabal' },
+  { value: 'NARANJA', label: 'Naranja' },
+  { value: 'OTRA', label: 'Otra' },
+];
+
+export default function ConfiguracionCodigosComercioPage() {
   const router = useRouter();
   const { isAdmin, needsBankSelection, canManage, withBankQuery } = useConfigAccess(router);
 
-  const [items, setItems] = useState<CategoryItem[]>([]);
-  const [drafts, setDrafts] = useState<Record<string, { nombre: string; activo: boolean }>>({});
-  const [newName, setNewName] = useState('');
+  const [items, setItems] = useState<CardCodeConfig[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, { label: string; active: boolean; sortOrder: number }>>({});
+  const [newNetwork, setNewNetwork] = useState<CardCodeConfig['network']>('AMEX');
+  const [newLabel, setNewLabel] = useState('');
   const [newActive, setNewActive] = useState(true);
   const [search, setSearch] = useState('');
 
@@ -27,31 +39,45 @@ export default function ConfiguracionCategoriasPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const availableNetworks = useMemo(() => {
+    const existing = new Set(items.map((item) => item.network));
+    return networkOptions.filter((option) => !existing.has(option.value));
+  }, [items]);
+
   const filteredItems = useMemo(() => {
     const normalized = search.trim().toLowerCase();
     if (!normalized) return items;
-    return items.filter((item) => item.nombre.toLowerCase().includes(normalized));
+    return items.filter((item) => {
+      const haystack = `${item.network} ${item.label}`.toLowerCase();
+      return haystack.includes(normalized);
+    });
   }, [items, search]);
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiJson<CategoryItem[]>(withBankQuery('/banks/me/categories'));
+      const data = await apiJson<CardCodeConfig[]>(withBankQuery('/banks/me/card-code-configs'));
       setItems(data);
       setDrafts(
         Object.fromEntries(
           data.map((item) => [
             item.id,
             {
-              nombre: item.nombre,
-              activo: item.activo,
+              label: item.label,
+              active: item.active,
+              sortOrder: item.sortOrder,
             },
           ]),
         ),
       );
+
+      const firstAvailable = networkOptions.find((option) => !data.some((item) => item.network === option.value));
+      if (firstAvailable) {
+        setNewNetwork(firstAvailable.value);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudieron cargar las categorias');
+      setError(err instanceof Error ? err.message : 'No se pudo cargar la configuracion');
     } finally {
       setLoading(false);
     }
@@ -63,12 +89,13 @@ export default function ConfiguracionCategoriasPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canManage]);
 
-  const updateDraft = (id: string, next: Partial<{ nombre: string; activo: boolean }>) => {
+  const updateDraft = (id: string, next: Partial<{ label: string; active: boolean; sortOrder: number }>) => {
     setDrafts((prev) => ({
       ...prev,
       [id]: {
-        nombre: prev[id]?.nombre ?? '',
-        activo: prev[id]?.activo ?? false,
+        label: prev[id]?.label ?? '',
+        active: prev[id]?.active ?? false,
+        sortOrder: prev[id]?.sortOrder ?? 0,
         ...next,
       },
     }));
@@ -80,19 +107,20 @@ export default function ConfiguracionCategoriasPage() {
     setError(null);
     setSuccess(null);
     try {
-      await apiJson(withBankQuery('/banks/me/categories'), {
+      await apiJson(withBankQuery('/banks/me/card-code-configs'), {
         method: 'POST',
         body: JSON.stringify({
-          nombre: newName,
-          activo: newActive,
+          network: newNetwork,
+          label: newLabel.trim() || undefined,
+          active: newActive,
         }),
       });
-      setNewName('');
+      setNewLabel('');
       setNewActive(true);
-      setSuccess('Categoria agregada.');
+      setSuccess('Categoria de codigo de comercio agregada.');
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo crear la categoria');
+      setError(err instanceof Error ? err.message : 'No se pudo agregar la categoria de codigo de comercio');
     } finally {
       setSaving(false);
     }
@@ -106,36 +134,37 @@ export default function ConfiguracionCategoriasPage() {
     setError(null);
     setSuccess(null);
     try {
-      await apiJson(withBankQuery(`/banks/me/categories/${id}`), {
+      await apiJson(withBankQuery(`/banks/me/card-code-configs/${id}`), {
         method: 'PATCH',
         body: JSON.stringify({
-          nombre: draft.nombre.trim(),
-          activo: draft.activo,
+          label: draft.label.trim(),
+          active: draft.active,
+          sortOrder: Number.isFinite(draft.sortOrder) ? draft.sortOrder : 0,
         }),
       });
-      setSuccess('Categoria actualizada.');
+      setSuccess('Categoria de codigo de comercio actualizada.');
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo actualizar la categoria');
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar la categoria de codigo de comercio');
     } finally {
       setSaving(false);
     }
   };
 
-  const onRemove = async (item: CategoryItem) => {
-    if (!window.confirm(`Eliminar la categoria ${item.nombre}?`)) return;
+  const onRemove = async (item: CardCodeConfig) => {
+    if (!window.confirm(`Quitar la configuracion para ${item.label}?`)) return;
 
     setSaving(true);
     setError(null);
     setSuccess(null);
     try {
-      await apiJson(withBankQuery(`/banks/me/categories/${item.id}`), {
+      await apiJson(withBankQuery(`/banks/me/card-code-configs/${item.id}`), {
         method: 'DELETE',
       });
-      setSuccess('Categoria eliminada.');
+      setSuccess('Categoria de codigo de comercio eliminada.');
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo eliminar la categoria');
+      setError(err instanceof Error ? err.message : 'No se pudo eliminar la categoria de codigo de comercio');
     } finally {
       setSaving(false);
     }
@@ -144,7 +173,7 @@ export default function ConfiguracionCategoriasPage() {
   return (
     <AppShell>
       <header className="fixed top-0 left-[var(--sidebar-width)] right-0 h-16 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/15 flex items-center justify-between px-8 shadow-[0px_12px_32px_rgba(42,52,57,0.06)] font-['Inter'] antialiased tracking-tight">
-        <h1 className="text-lg font-extrabold text-slate-900 tracking-tighter">Configuracion - Categorias</h1>
+        <h1 className="text-lg font-extrabold text-slate-900 tracking-tighter">Configuracion - Codigos de Comercio</h1>
         <a href="/configuracion" className="text-xs font-semibold text-primary hover:underline">
           Volver a Configuracion
         </a>
@@ -169,15 +198,35 @@ export default function ConfiguracionCategoriasPage() {
             ) : null}
 
             <section className="bg-surface-container-lowest rounded-2xl p-6 shadow-[0px_12px_32px_rgba(42,52,57,0.06)] space-y-4">
-              <form onSubmit={onCreate} className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
+              <div className="text-sm text-on-surface-variant">
+                Por defecto se inicializan Visa y Mastercard. Desde aqui puedes agregar, editar, habilitar, deshabilitar y quitar opciones.
+              </div>
+
+              <form onSubmit={onCreate} className="grid gap-3 md:grid-cols-[1fr_1fr_auto_auto] md:items-end">
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Nombre</label>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Tarjeta</label>
+                  <select
+                    className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
+                    value={newNetwork}
+                    onChange={(event) => setNewNetwork(event.target.value as CardCodeConfig['network'])}
+                    disabled={availableNetworks.length === 0 || saving}
+                  >
+                    {availableNetworks.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Nombre visible</label>
                   <input
                     className="mt-2 w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                    value={newName}
-                    onChange={(event) => setNewName(event.target.value)}
-                    placeholder="Ej: Indumentaria"
-                    disabled={saving}
+                    value={newLabel}
+                    onChange={(event) => setNewLabel(event.target.value)}
+                    placeholder="Ej: American Express"
+                    disabled={saving || availableNetworks.length === 0}
                   />
                 </div>
 
@@ -187,15 +236,15 @@ export default function ConfiguracionCategoriasPage() {
                     className="h-4 w-4 accent-primary"
                     checked={newActive}
                     onChange={(event) => setNewActive(event.target.checked)}
-                    disabled={saving}
+                    disabled={saving || availableNetworks.length === 0}
                   />
-                  Activa
+                  Habilitada
                 </label>
 
                 <button
                   type="submit"
                   className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-300 disabled:opacity-60"
-                  disabled={saving}
+                  disabled={saving || availableNetworks.length === 0}
                 >
                   Agregar
                 </button>
@@ -204,7 +253,7 @@ export default function ConfiguracionCategoriasPage() {
               <div className="grid gap-2 md:grid-cols-[1fr_auto] md:items-center">
                 <input
                   className="bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm"
-                  placeholder="Buscar categoria..."
+                  placeholder="Buscar tarjeta o etiqueta..."
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                 />
@@ -217,7 +266,9 @@ export default function ConfiguracionCategoriasPage() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-surface-container-low/50">
-                      <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Nombre</th>
+                      <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Tarjeta</th>
+                      <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Nombre visible</th>
+                      <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Orden</th>
                       <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Estado</th>
                       <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant text-right">Acciones</th>
                     </tr>
@@ -225,27 +276,42 @@ export default function ConfiguracionCategoriasPage() {
                   <tbody className="divide-y divide-slate-100">
                     {loading ? (
                       <tr>
-                        <td colSpan={3} className="px-4 py-6 text-sm text-on-surface-variant">
-                          Cargando categorias...
+                        <td colSpan={5} className="px-4 py-6 text-sm text-on-surface-variant">
+                          Cargando configuracion...
                         </td>
                       </tr>
                     ) : null}
                     {!loading && filteredItems.length === 0 ? (
                       <tr>
-                        <td colSpan={3} className="px-4 py-6 text-sm text-on-surface-variant">
-                          No hay categorias para mostrar.
+                        <td colSpan={5} className="px-4 py-6 text-sm text-on-surface-variant">
+                          No hay tarjetas para mostrar.
                         </td>
                       </tr>
                     ) : null}
                     {filteredItems.map((item) => {
-                      const draft = drafts[item.id] || { nombre: item.nombre, activo: item.activo };
+                      const draft = drafts[item.id] || {
+                        label: item.label,
+                        active: item.active,
+                        sortOrder: item.sortOrder,
+                      };
+
                       return (
                         <tr key={item.id} className="hover:bg-surface-container-low transition-colors">
+                          <td className="px-4 py-3 text-sm font-semibold text-on-surface">{item.network}</td>
                           <td className="px-4 py-3">
                             <input
                               className="w-full bg-surface-container-low border-none rounded-xl px-3 py-2 text-sm"
-                              value={draft.nombre}
-                              onChange={(event) => updateDraft(item.id, { nombre: event.target.value })}
+                              value={draft.label}
+                              onChange={(event) => updateDraft(item.id, { label: event.target.value })}
+                              disabled={saving}
+                            />
+                          </td>
+                          <td className="px-4 py-3 w-28">
+                            <input
+                              type="number"
+                              className="w-full bg-surface-container-low border-none rounded-xl px-3 py-2 text-sm"
+                              value={draft.sortOrder}
+                              onChange={(event) => updateDraft(item.id, { sortOrder: Number(event.target.value || 0) })}
                               disabled={saving}
                             />
                           </td>
@@ -254,11 +320,11 @@ export default function ConfiguracionCategoriasPage() {
                               <input
                                 type="checkbox"
                                 className="h-4 w-4 accent-primary"
-                                checked={draft.activo}
-                                onChange={(event) => updateDraft(item.id, { activo: event.target.checked })}
+                                checked={draft.active}
+                                onChange={(event) => updateDraft(item.id, { active: event.target.checked })}
                                 disabled={saving}
                               />
-                              {draft.activo ? 'Activa' : 'Inactiva'}
+                              {draft.active ? 'Habilitada' : 'Deshabilitada'}
                             </label>
                           </td>
                           <td className="px-4 py-3">
@@ -277,7 +343,7 @@ export default function ConfiguracionCategoriasPage() {
                                 onClick={() => onRemove(item)}
                                 disabled={saving}
                               >
-                                Eliminar
+                                Quitar
                               </button>
                             </div>
                           </td>

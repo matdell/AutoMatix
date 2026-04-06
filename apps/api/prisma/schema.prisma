@@ -39,19 +39,54 @@ enum CardNetwork {
   OTRA
 }
 
-enum CampaignType {
-  DISCOUNT
-  INSTALLMENTS
-  CASHBACK
+enum CampaignStatus {
+  EDITING
+  PENDING
+  ACTIVE
+  FINALIZED
+  CANCELLED
+  ARCHIVED
 }
 
-enum CampaignStatus {
-  INVITED
-  OPERATIONS
-  PROCESSOR
-  PARTIAL
-  ACTIVE
-  ARCHIVED
+enum CampaignBenefitType {
+  DISCOUNT
+  INSTALLMENTS
+  INSTALLMENTS_DISCOUNT
+  CASHBACK
+  FINANCING
+  BANK_CREDENTIAL
+}
+
+enum CampaignCommercialStatus {
+  INVITACION
+  OPERACIONES
+  ADMINISTRADORA
+  PARCIAL
+  OK
+}
+
+enum CampaignAdhesionStatus {
+  PENDIENTE
+  ACEPTADA
+  RECHAZADA
+}
+
+enum CampaignTargetMode {
+  RETAILER_PDV
+  RUBROS
+  SHOPPING
+  LOCATION
+}
+
+enum CampaignLocationLevel {
+  COUNTRY
+  PROVINCE
+  CITY
+}
+
+enum CampaignCloseType {
+  WITH_CLOSE_DATE
+  WITHOUT_CLOSE_DATE
 }
 
 enum InvitationStatus {
@@ -91,35 +126,40 @@ enum ProvisioningStatus {
 }
 
 model Bank {
-  id             String   @id @default(cuid())
-  nombre         String
-  nombreCompleto String?
-  razonSocial    String?
-  cuit           String?
+  id                  String    @id @default(cuid())
+  nombre              String
+  nombreCompleto      String?
+  razonSocial         String?
+  cuit                String?
   direccionCasaMatriz String?
-  slug           String   @unique
-  logoUrl        String?
-  paymentMethods String[]
-  bines          String[]
-  fechaAlta      DateTime?
-  activo         Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  slug                String    @unique
+  logoUrl             String?
+  paymentMethods      String[]
+  bines               String[]
+  timezone            String    @default("America/Argentina/Buenos_Aires")
+  fechaAlta           DateTime?
+  activo              Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  users          User[]
-  brands         Brand[]
-  bankBranches   BankBranch[]
-  merchants      Merchant[]
-  branches       Branch[]
-  categories     Category[]
-  brandCategories BrandCategory[]
-  shoppings      Shopping[]
+  users                User[]
+  brands               Brand[]
+  bankBranches         BankBranch[]
+  merchants            Merchant[]
+  branches             Branch[]
+  categories           Category[]
+  brandCategories      BrandCategory[]
+  shoppings            Shopping[]
   branchEstablishments BranchEstablishment[]
-  campaigns      Campaign[]
-  invitations    Invitation[]
-  validations    ValidationError[]
-  notifications  Notification[]
-  auditLogs      AuditLog[]
+  cardCodeConfigs      BankCardCodeConfig[]
+  processorConfigs     BankProcessorConfig[]
+  campaignTypeConfigs  BankCampaignTypeConfig[]
+  binConfigs           BankBinConfig[]
+  campaigns            Campaign[]
+  invitations          Invitation[]
+  validations          ValidationError[]
+  notifications        Notification[]
+  auditLogs            AuditLog[]
   provisioningRequests BankProvisioningRequest[]
 }
 
@@ -137,39 +177,39 @@ model BankBranch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users     User[]
+  users User[]
 
   @@index([bankId])
 }
 
 model User {
-  id            String   @id @default(cuid())
-  tenantId      String
-  bank          Bank     @relation(fields: [tenantId], references: [id])
-  email         String
-  passwordHash  String
-  nombre        String
-  role          Role
-  brandId       String?
-  merchantId    String?
-  bankBranchId  String?
-  pointOfSaleId String?
-  isActive      Boolean  @default(true)
-  twoFactorEmailEnabled Boolean @default(false)
-  twoFactorTotpEnabled  Boolean @default(false)
+  id                    String    @id @default(cuid())
+  tenantId              String
+  bank                  Bank      @relation(fields: [tenantId], references: [id])
+  email                 String
+  passwordHash          String
+  nombre                String
+  role                  Role
+  brandId               String?
+  merchantId            String?
+  bankBranchId          String?
+  pointOfSaleId         String?
+  isActive              Boolean   @default(true)
+  twoFactorEmailEnabled Boolean   @default(false)
+  twoFactorTotpEnabled  Boolean   @default(false)
   twoFactorTotpSecret   String?
-  lastLoginAt   DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  lastLoginAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  brand         Brand?     @relation(fields: [brandId], references: [id])
-  merchant      Merchant? @relation(fields: [merchantId], references: [id])
-  bankBranch    BankBranch? @relation(fields: [bankBranchId], references: [id])
-  pointOfSale   Branch?    @relation("UserPointOfSale", fields: [pointOfSaleId], references: [id])
-  auditLogs     AuditLog[]
-  archivedCampaigns Campaign[] @relation("CampaignArchivedBy")
+  brand               Brand?               @relation(fields: [brandId], references: [id])
+  merchant            Merchant?            @relation(fields: [merchantId], references: [id])
+  bankBranch          BankBranch?          @relation(fields: [bankBranchId], references: [id])
+  pointOfSale         Branch?              @relation("UserPointOfSale", fields: [pointOfSaleId], references: [id])
+  auditLogs           AuditLog[]
+  archivedCampaigns   Campaign[]           @relation("CampaignArchivedBy")
   passwordResetTokens PasswordResetToken[]
-  twoFactorSessions TwoFactorSession[]
+  twoFactorSessions   TwoFactorSession[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -180,26 +220,27 @@ model User {
 }
 
 model Brand {
-  id        String   @id @default(cuid())
-  tenantId  String
-  bank      Bank     @relation(fields: [tenantId], references: [id])
-  nombre    String
-  logoUrl   String?
-  sitioWeb  String?
-  facebook  String?
-  instagram String?
-  twitter   String?
-  emailPrincipal String?
+  id                String   @id @default(cuid())
+  tenantId          String
+  bank              Bank     @relation(fields: [tenantId], references: [id])
+  nombre            String
+  logoUrl           String?
+  sitioWeb          String?
+  facebook          String?
+  instagram         String?
+  twitter           String?
+  emailPrincipal    String?
   telefonoPrincipal String?
-  processor String?
-  activo    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  processor         String?
+  activo            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  legalEntities BrandLegalEntity[]
-  categories   BrandCategory[]
-  branches     Branch[]
-  users        User[]
+  legalEntities   BrandLegalEntity[]
+  categories      BrandCategory[]
+  branches        Branch[]
+  campaignTargets CampaignTargetRetailer[]
+  users           User[]
 
   @@index([tenantId])
 }
@@ -211,8 +252,8 @@ model BrandLegalEntity {
   merchantId String
   createdAt  DateTime @default(now())
 
-  brand      Brand    @relation(fields: [brandId], references: [id])
-  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  brand    Brand    @relation(fields: [brandId], references: [id])
+  merchant Merchant @relation(fields: [merchantId], references: [id])
 
   @@unique([brandId, merchantId])
   @@index([tenantId])
@@ -229,7 +270,8 @@ model Category {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  brands    BrandCategory[]
+  brands          BrandCategory[]
+  campaignTargets CampaignTargetCategory[]
 
   @@unique([tenantId, nombre])
   @@index([tenantId])
@@ -242,9 +284,9 @@ model BrandCategory {
   categoryId String
   createdAt  DateTime @default(now())
 
-  bank      Bank     @relation(fields: [tenantId], references: [id])
-  brand     Brand    @relation(fields: [brandId], references: [id])
-  category  Category @relation(fields: [categoryId], references: [id])
+  bank     Bank     @relation(fields: [tenantId], references: [id])
+  brand    Brand    @relation(fields: [brandId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
 
   @@unique([brandId, categoryId])
   @@index([tenantId])
@@ -253,65 +295,67 @@ model BrandCategory {
 }
 
 model Merchant {
-  id            String         @id @default(cuid())
-  tenantId      String
-  bank          Bank           @relation(fields: [tenantId], references: [id])
-  nombre        String
-  razonSocial   String?
-  categoria     String
-  estado        MerchantStatus @default(PENDING)
-  cuit          String?
+  id              String         @id @default(cuid())
+  tenantId        String
+  bank            Bank           @relation(fields: [tenantId], references: [id])
+  nombre          String
+  razonSocial     String?
+  categoria       String
+  estado          MerchantStatus @default(PENDING)
+  cuit            String?
   direccionSocial String?
-  merchantNumber String?
-  contactoEmail String?
-  telefono      String?
-  processor     String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  merchantNumber  String?
+  contactoEmail   String?
+  telefono        String?
+  processor       String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
-  branches      Branch[]
-  brands        BrandLegalEntity[]
-  campaigns     CampaignMerchant[]
-  invitations   Invitation[]
-  validations   ValidationError[]
-  users         User[]
+  branches    Branch[]
+  brands      BrandLegalEntity[]
+  invitations Invitation[]
+  validations ValidationError[]
+  users       User[]
+  campaignAdhesions CampaignMerchantAdhesion[]
 
   @@index([tenantId])
 }
 
 model Branch {
-  id            String   @id @default(cuid())
-  tenantId      String
-  bank          Bank     @relation(fields: [tenantId], references: [id])
-  merchantId    String
-  merchant      Merchant @relation(fields: [merchantId], references: [id])
-  retailerId    String?
-  retailer      Brand?   @relation(fields: [retailerId], references: [id])
-  nombre        String
-  direccion     String
-  calle         String?
-  numero        String?
-  piso          String?
-  codigoPostal  String?
-  ciudad        String
-  provincia     String
-  pais          String
-  placeId       String?
-  lat           Float?
-  lng           Float?
+  id             String    @id @default(cuid())
+  tenantId       String
+  bank           Bank      @relation(fields: [tenantId], references: [id])
+  merchantId     String
+  merchant       Merchant  @relation(fields: [merchantId], references: [id])
+  retailerId     String?
+  retailer       Brand?    @relation(fields: [retailerId], references: [id])
+  nombre         String
+  direccion      String
+  calle          String?
+  numero         String?
+  piso           String?
+  codigoPostal   String?
+  ciudad         String
+  provincia      String
+  pais           String
+  placeId        String?
+  lat            Float?
+  lng            Float?
   merchantNumber String?
-  processor     String?
-  shoppingId    String?
-  shopping      Shopping? @relation(fields: [shoppingId], references: [id])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  processor      String?
+  activo         Boolean   @default(true)
+  shoppingId     String?
+  shopping       Shopping? @relation(fields: [shoppingId], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  users         User[]   @relation("UserPointOfSale")
-  establishments BranchEstablishment[]
-  campaignLinks CampaignMerchant[]
+  users           User[]                 @relation("UserPointOfSale")
+  establishments  BranchEstablishment[]
+  campaignTargets CampaignTargetBranch[]
   invitationLinks InvitationBranch[]
 
   @@index([tenantId])
+  @@index([tenantId, activo])
   @@index([merchantId])
   @@index([retailerId])
   @@index([shoppingId])
@@ -322,14 +366,17 @@ model Shopping {
   tenantId  String
   bank      Bank     @relation(fields: [tenantId], references: [id])
   nombre    String
+  grupo     String?
   activo    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  branches  Branch[]
+  branches        Branch[]
+  campaignTargets CampaignTargetShopping[]
 
   @@unique([tenantId, nombre])
   @@index([tenantId])
+  @@index([tenantId, grupo])
 }
 
 model BranchEstablishment {
@@ -347,44 +394,263 @@ model BranchEstablishment {
   @@index([branchId])
 }
 
-model Campaign {
-  id          String         @id @default(cuid())
-  tenantId    String
-  bank        Bank           @relation(fields: [tenantId], references: [id])
-  nombre      String
-  tipo        CampaignType
-  estado      CampaignStatus @default(INVITED)
-  estadoAnterior CampaignStatus?
-  archivedAt  DateTime?
-  archivedById String?
-  archivedBy  User?          @relation("CampaignArchivedBy", fields: [archivedById], references: [id])
-  fechaInicio DateTime
-  fechaFin    DateTime
-  condiciones Json
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model BankCardCodeConfig {
+  id        String      @id @default(cuid())
+  tenantId  String
+  bank      Bank        @relation(fields: [tenantId], references: [id])
+  network   CardNetwork
+  label     String
+  active    Boolean     @default(true)
+  sortOrder Int         @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
-  merchants   CampaignMerchant[]
+  campaignLinks CampaignPaymentMethod[]
 
+  @@unique([tenantId, network])
   @@index([tenantId])
-  @@index([archivedById])
+  @@index([tenantId, active])
 }
 
-model CampaignMerchant {
+model BankProcessorConfig {
+  id        String   @id @default(cuid())
+  tenantId  String
+  bank      Bank     @relation(fields: [tenantId], references: [id])
+  nombre    String
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, nombre])
+  @@index([tenantId])
+  @@index([tenantId, active])
+}
+
+model BankCampaignTypeConfig {
+  id        String             @id @default(cuid())
+  tenantId  String
+  bank      Bank               @relation(fields: [tenantId], references: [id])
+  nombre    String
+  benefitType CampaignBenefitType @default(DISCOUNT)
+  mode      CampaignTargetMode
+  locked    Boolean            @default(false)
+  active    Boolean            @default(true)
+  sortOrder Int                @default(0)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  campaigns Campaign[]
+
+  @@unique([tenantId, nombre])
+  @@index([tenantId])
+  @@index([tenantId, active])
+  @@index([tenantId, benefitType])
+  @@index([tenantId, mode])
+}
+
+model Campaign {
+  id                   String                 @id @default(cuid())
+  tenantId             String
+  bank                 Bank                   @relation(fields: [tenantId], references: [id])
+  nombre               String
+  campaignTypeConfigId String
+  campaignTypeConfig   BankCampaignTypeConfig @relation(fields: [campaignTypeConfigId], references: [id])
+  closeType            CampaignCloseType
+  estado               CampaignStatus         @default(EDITING)
+  commercialStatus     CampaignCommercialStatus @default(INVITACION)
+  estadoAnterior       CampaignStatus?
+  archivedAt           DateTime?
+  archivedById         String?
+  archivedBy           User?                  @relation("CampaignArchivedBy", fields: [archivedById], references: [id])
+  codigoInterno        String?
+  codigoExterno        String?
+  fechaVigDesde        DateTime
+  fechaVigHasta        DateTime
+  fechaCierre          DateTime?
+  dias                 String[]
+  targetAllShoppings   Boolean                @default(false)
+  locationLevel        CampaignLocationLevel?
+  fechaPrioridad       DateTime?
+  condiciones          Json?
+  eligibility          Json?
+  resolvedBines        String[]               @default([])
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  targetRetailers  CampaignTargetRetailer[]
+  targetBranches   CampaignTargetBranch[]
+  targetCategories CampaignTargetCategory[]
+  targetShoppings  CampaignTargetShopping[]
+  targetLocations  CampaignTargetLocation[]
+  paymentMethods   CampaignPaymentMethod[]
+  processorCodes   CampaignProcessorCode[]
+  merchantAdhesions CampaignMerchantAdhesion[]
+
+  @@index([tenantId])
+  @@index([tenantId, estado])
+  @@index([tenantId, commercialStatus])
+  @@index([tenantId, fechaVigHasta])
+  @@index([tenantId, locationLevel])
+  @@index([campaignTypeConfigId])
+  @@index([archivedById])
+  @@unique([tenantId, codigoInterno])
+}
+
+model CampaignTargetRetailer {
   id         String   @id @default(cuid())
   tenantId   String
   campaignId String
-  merchantId String
-  branchId   String?
+  retailerId String
   createdAt  DateTime @default(now())
 
-  campaign   Campaign @relation(fields: [campaignId], references: [id])
-  merchant   Merchant @relation(fields: [merchantId], references: [id])
-  branch     Branch?  @relation(fields: [branchId], references: [id])
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  retailer Brand    @relation(fields: [retailerId], references: [id], onDelete: Cascade)
 
+  @@unique([campaignId, retailerId])
+  @@index([tenantId])
+  @@index([campaignId])
+  @@index([retailerId])
+}
+
+model CampaignTargetBranch {
+  id         String   @id @default(cuid())
+  tenantId   String
+  campaignId String
+  branchId   String
+  createdAt  DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, branchId])
+  @@index([tenantId])
+  @@index([campaignId])
+  @@index([branchId])
+}
+
+model CampaignTargetCategory {
+  id         String   @id @default(cuid())
+  tenantId   String
+  campaignId String
+  categoryId String
+  createdAt  DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, categoryId])
+  @@index([tenantId])
+  @@index([campaignId])
+  @@index([categoryId])
+}
+
+model CampaignTargetShopping {
+  id         String   @id @default(cuid())
+  tenantId   String
+  campaignId String
+  shoppingId String
+  createdAt  DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  shopping Shopping @relation(fields: [shoppingId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, shoppingId])
+  @@index([tenantId])
+  @@index([campaignId])
+  @@index([shoppingId])
+}
+
+model CampaignTargetLocation {
+  id         String                @id @default(cuid())
+  tenantId   String
+  campaignId String
+  level      CampaignLocationLevel
+  value      String
+  createdAt  DateTime              @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, level, value])
+  @@index([tenantId])
+  @@index([campaignId])
+  @@index([level])
+}
+
+model CampaignPaymentMethod {
+  id               String   @id @default(cuid())
+  tenantId         String
+  campaignId       String
+  cardCodeConfigId String
+  createdAt        DateTime @default(now())
+
+  campaign       Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  cardCodeConfig BankCardCodeConfig @relation(fields: [cardCodeConfigId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, cardCodeConfigId])
+  @@index([tenantId])
+  @@index([campaignId])
+  @@index([cardCodeConfigId])
+}
+
+model CampaignProcessorCode {
+  id         String   @id @default(cuid())
+  tenantId   String
+  campaignId String
+  processor  String
+  code       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, processor, code])
+  @@index([tenantId])
+  @@index([campaignId])
+}
+
+model CampaignMerchantAdhesion {
+  id         String                @id @default(cuid())
+  tenantId   String
+  campaignId String
+  merchantId String
+  status     CampaignAdhesionStatus @default(PENDIENTE)
+  respondedAt DateTime?
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, merchantId])
   @@index([tenantId])
   @@index([campaignId])
   @@index([merchantId])
+  @@index([tenantId, status])
+}
+
+model BankBinConfig {
+  id        String   @id @default(cuid())
+  tenantId  String
+  bank      Bank     @relation(fields: [tenantId], references: [id])
+  bin       String
+  network   String
+  cardType  String
+  segment   String?
+  alliance  String?
+  channel   String?
+  product   String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, bin])
+  @@index([tenantId])
+  @@index([tenantId, active])
+  @@index([tenantId, network])
+  @@index([tenantId, cardType])
+  @@index([tenantId, segment])
+  @@index([tenantId, alliance])
 }
 
 model Invitation {
@@ -400,19 +666,19 @@ model Invitation {
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
 
-  branches   InvitationBranch[]
+  branches InvitationBranch[]
 
   @@index([tenantId])
 }
 
 model InvitationBranch {
-  id           String     @id @default(cuid())
+  id           String @id @default(cuid())
   tenantId     String
   invitationId String
   branchId     String
 
-  invitation   Invitation @relation(fields: [invitationId], references: [id])
-  branch       Branch     @relation(fields: [branchId], references: [id])
+  invitation Invitation @relation(fields: [invitationId], references: [id])
+  branch     Branch     @relation(fields: [branchId], references: [id])
 
   @@index([tenantId])
 }
@@ -446,27 +712,27 @@ model Notification {
 }
 
 model PasswordResetToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String   @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
 }
 
 model TwoFactorSession {
-  id                 String   @id @default(cuid())
+  id                 String    @id @default(cuid())
   userId             String
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   emailCode          String?
   emailCodeExpiresAt DateTime?
   emailCodeUsedAt    DateTime?
   expiresAt          DateTime
   usedAt             DateTime?
-  createdAt          DateTime @default(now())
+  createdAt          DateTime  @default(now())
 
   @@index([userId])
   @@index([expiresAt])
@@ -474,22 +740,22 @@ model TwoFactorSession {
 
 model BankProvisioningRequest {
   id              String             @id @default(cuid())
-  bankId           String
-  bank             Bank               @relation(fields: [bankId], references: [id])
-  target           ProvisioningTarget
-  status           ProvisioningStatus @default(REQUESTED)
-  provider         String?
-  domain           String?
-  apiDomain        String?
-  region           String?
-  config           Json?
-  credentials      Json?
-  notes            String?
-  createdByUserId  String?
-  processedAt      DateTime?
-  errorMessage     String?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  bankId          String
+  bank            Bank               @relation(fields: [bankId], references: [id])
+  target          ProvisioningTarget
+  status          ProvisioningStatus @default(REQUESTED)
+  provider        String?
+  domain          String?
+  apiDomain       String?
+  region          String?
+  config          Json?
+  credentials     Json?
+  notes           String?
+  createdByUserId String?
+  processedAt     DateTime?
+  errorMessage    String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   @@index([bankId])
   @@index([status])

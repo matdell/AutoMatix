@@ -13,6 +13,8 @@ type AppShellProps = {
 
 export default function AppShell({ children, mainClassName }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -26,6 +28,22 @@ export default function AppShell({ children, mainClassName }: AppShellProps) {
   useEffect(() => {
     window.localStorage.setItem('sidebar-collapsed', collapsed ? '1' : '0');
   }, [collapsed]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1024px)');
+    const sync = () => {
+      const nextDesktop = media.matches;
+      setIsDesktop(nextDesktop);
+      if (nextDesktop) {
+        setMobileOpen(false);
+      }
+    };
+    sync();
+    media.addEventListener('change', sync);
+    return () => {
+      media.removeEventListener('change', sync);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isCurrentCentralHost()) {
@@ -52,7 +70,7 @@ export default function AppShell({ children, mainClassName }: AppShellProps) {
     }
   }, [pathname, router]);
 
-  const sidebarWidth = collapsed ? '5rem' : '16rem';
+  const sidebarWidth = isDesktop ? (collapsed ? '5rem' : '16rem') : '0rem';
   const mainClasses = ['ml-[var(--sidebar-width)] min-h-screen transition-[margin] duration-200', mainClassName]
     .filter(Boolean)
     .join(' ');
@@ -62,7 +80,38 @@ export default function AppShell({ children, mainClassName }: AppShellProps) {
       className="bg-surface text-on-surface min-h-screen"
       style={{ '--sidebar-width': sidebarWidth } as CSSProperties}
     >
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((prev) => !prev)} />
+      {mobileOpen ? (
+        <button
+          type="button"
+          aria-label="Cerrar menu"
+          className="fixed inset-0 z-30 bg-slate-900/35 lg:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      ) : null}
+
+      <button
+        type="button"
+        aria-label={mobileOpen ? 'Minimizar menu' : 'Expandir menu'}
+        className="fixed left-3 top-3 z-50 lg:hidden rounded-lg border border-slate-200 bg-white/95 px-2.5 py-2 text-slate-700 shadow-sm"
+        onClick={() => setMobileOpen((prev) => !prev)}
+      >
+        <span className="material-symbols-outlined text-[20px]">
+          {mobileOpen ? 'chevron_left' : 'menu'}
+        </span>
+      </button>
+
+      <Sidebar
+        collapsed={collapsed}
+        mobileOpen={mobileOpen}
+        onMobileClose={() => setMobileOpen(false)}
+        onToggle={() => {
+          if (isDesktop) {
+            setCollapsed((prev) => !prev);
+          } else {
+            setMobileOpen(false);
+          }
+        }}
+      />
       <main className={mainClasses}>{children}</main>
     </div>
   );

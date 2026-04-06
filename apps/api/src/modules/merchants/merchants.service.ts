@@ -53,6 +53,37 @@ export class MerchantsService {
             },
           },
         },
+        branches: {
+          select: {
+            id: true,
+            nombre: true,
+            activo: true,
+            processor: true,
+            retailerId: true,
+            direccion: true,
+            ciudad: true,
+            provincia: true,
+            pais: true,
+            shopping: {
+              select: {
+                id: true,
+                nombre: true,
+              },
+            },
+            retailer: {
+              select: {
+                id: true,
+                nombre: true,
+              },
+            },
+            establishments: {
+              select: {
+                cardNetwork: true,
+                number: true,
+              },
+            },
+          },
+        },
       },
     });
   }
@@ -78,6 +109,37 @@ export class MerchantsService {
                 id: true,
                 nombre: true,
                 activo: true,
+              },
+            },
+          },
+        },
+        branches: {
+          select: {
+            id: true,
+            nombre: true,
+            activo: true,
+            processor: true,
+            retailerId: true,
+            direccion: true,
+            ciudad: true,
+            provincia: true,
+            pais: true,
+            shopping: {
+              select: {
+                id: true,
+                nombre: true,
+              },
+            },
+            retailer: {
+              select: {
+                id: true,
+                nombre: true,
+              },
+            },
+            establishments: {
+              select: {
+                cardNetwork: true,
+                number: true,
               },
             },
           },

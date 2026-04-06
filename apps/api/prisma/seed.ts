@@ -1,5 +1,14 @@
 import 'dotenv/config';
-import { PrismaClient, CampaignStatus, CampaignType, InvitationStatus, MerchantStatus, Role } from '@prisma/client';
+import {
+  CampaignCloseType,
+  CampaignStatus,
+  CampaignTargetMode,
+  CardNetwork,
+  InvitationStatus,
+  MerchantStatus,
+  PrismaClient,
+  Role,
+} from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 
@@ -114,30 +123,72 @@ async function main() {
     },
   });
 
+  const visaConfig = await prisma.bankCardCodeConfig.create({
+    data: {
+      tenantId: banco.id,
+      network: CardNetwork.VISA,
+      label: 'Visa',
+      active: true,
+      sortOrder: 10,
+    },
+  });
+
+  const masterConfig = await prisma.bankCardCodeConfig.create({
+    data: {
+      tenantId: banco.id,
+      network: CardNetwork.MASTERCARD,
+      label: 'Mastercard',
+      active: true,
+      sortOrder: 20,
+    },
+  });
+
+  const campaignType = await prisma.bankCampaignTypeConfig.create({
+    data: {
+      tenantId: banco.id,
+      nombre: 'Campana por retailers y PDV',
+      mode: CampaignTargetMode.RETAILER_PDV,
+      active: true,
+      sortOrder: 10,
+    },
+  });
+
   const campaign = await prisma.campaign.create({
     data: {
       tenantId: banco.id,
       nombre: 'Primavera 12 Cuotas',
-      tipo: CampaignType.INSTALLMENTS,
+      campaignTypeConfigId: campaignType.id,
+      closeType: CampaignCloseType.WITHOUT_CLOSE_DATE,
       estado: CampaignStatus.ACTIVE,
-      fechaInicio: new Date('2026-09-01T00:00:00.000Z'),
-      fechaFin: new Date('2026-11-30T23:59:59.000Z'),
+      fechaVigDesde: new Date('2026-09-01T00:00:00.000Z'),
+      fechaVigHasta: new Date('2026-11-30T23:59:59.000Z'),
+      dias: ['L', 'M', 'X', 'J', 'V', 'S', 'D'],
       condiciones: {
         cuotas: 12,
         productos: ['Indumentaria', 'Electro'],
         tope: 50000,
       },
-      merchants: {
+      targetBranches: {
         create: [
           {
             tenantId: banco.id,
-            merchantId: merchantUno.id,
             branchId: branchUno.id,
           },
           {
             tenantId: banco.id,
-            merchantId: merchantDos.id,
             branchId: branchDos.id,
+          },
+        ],
+      },
+      paymentMethods: {
+        create: [
+          {
+            tenantId: banco.id,
+            cardCodeConfigId: visaConfig.id,
+          },
+          {
+            tenantId: banco.id,
+            cardCodeConfigId: masterConfig.id,
           },
         ],
       },

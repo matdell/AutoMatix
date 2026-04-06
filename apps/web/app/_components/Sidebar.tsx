@@ -15,7 +15,7 @@ type NavItem = {
 const baseItems: NavItem[] = [
   { href: '/dashboard', label: 'Tablero', icon: 'dashboard' },
   { href: '/retailers', label: 'Retailers', icon: 'storefront' },
-  { href: '/razones-sociales', label: 'Razones sociales', icon: 'domain' },
+  { href: '/razones-sociales', label: 'Razones Sociales', icon: 'business_center' },
   { href: '/campanas', label: 'Campanas', icon: 'campaign' },
   { href: '/invitaciones', label: 'Invitaciones', icon: 'mail' },
   { href: '#', label: 'Auditoria', icon: 'history_edu' },
@@ -52,19 +52,35 @@ const bankUserViewerRoles = new Set([
   'BANK_BRANCH_OPERATOR',
 ]);
 
-const footerBaseItems: NavItem[] = [{ href: '#', label: 'Soporte', icon: 'contact_support' }];
+const configurationItems: NavItem[] = [
+  { href: '/configuracion', label: 'Resumen', icon: 'tune' },
+  { href: '/configuracion/categorias', label: 'Categorias', icon: 'category' },
+  { href: '/configuracion/codigos-comercio', label: 'Codigos Comercio', icon: 'credit_card' },
+  { href: '/configuracion/shoppings', label: 'Shoppings', icon: 'local_mall' },
+  { href: '/configuracion/procesadores', label: 'Procesadores', icon: 'hub' },
+  { href: '/configuracion/tipos-campania', label: 'Tipos Campana', icon: 'list_alt' },
+];
+
+const footerItems: NavItem[] = [
+  { href: '#', label: 'Soporte', icon: 'contact_support' },
+];
 
 type SidebarProps = {
   collapsed: boolean;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
   onToggle: () => void;
 };
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ collapsed, mobileOpen, onMobileClose, onToggle }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [userRole, setUserRole] = useState<string | null>(null);
   const [bankLogoUrl, setBankLogoUrl] = useState<string | null>(null);
   const [isCentralHost, setIsCentralHost] = useState(false);
+  const [configExpanded, setConfigExpanded] = useState(false);
+
+  const compact = collapsed && !mobileOpen;
 
   useEffect(() => {
     const raw = window.localStorage.getItem('user');
@@ -106,7 +122,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const useCentralSuperAdminMenu = userRole === 'SUPERADMIN' && isCentralHost;
   const orderedBankMenuItems = useMemo(() => {
     const [dashboardItem, ...tailItems] = baseItems;
-    return [...bankAdminItems, ...bankBranchItems, dashboardItem, ...tailItems];
+    return [dashboardItem, ...bankAdminItems, ...bankBranchItems, ...tailItems];
   }, []);
 
   const orderedSuperAdminBankMenuItems = useMemo(() => {
@@ -138,10 +154,18 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     return pathname === href || pathname.startsWith(`${href}/`);
   };
 
+  const configActive = configurationItems.some((item) => isActive(item.href));
+
+  useEffect(() => {
+    if (configActive) {
+      setConfigExpanded(true);
+    }
+  }, [configActive]);
+
   const linkClassName = (active: boolean) =>
     [
       'flex items-center px-3 py-2 rounded-lg transition-all duration-200 ease-in-out',
-      collapsed ? 'justify-center' : 'space-x-3',
+      compact ? 'justify-center' : 'space-x-3',
       active
         ? 'bg-white text-indigo-600 shadow-sm font-semibold'
         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50',
@@ -151,7 +175,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     [
       linkClassName(active),
       'text-xs',
-      collapsed ? '' : 'ml-6',
+      compact ? '' : 'ml-6',
     ]
       .filter(Boolean)
       .join(' ');
@@ -159,18 +183,11 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const groupHeaderClassName = (active: boolean) =>
     [
       'flex items-center px-3 py-2 rounded-lg',
-      collapsed ? 'justify-center' : 'space-x-3',
+      compact ? 'justify-center' : 'space-x-3',
       active ? 'text-indigo-600 font-semibold' : 'text-slate-500',
     ].join(' ');
 
   const superAdminActive = superAdminItems.some((item) => isActive(item.href));
-  const footerItems = useMemo(() => {
-    const items = [...footerBaseItems];
-    if (userRole === 'BANK_ADMIN') {
-      items.unshift({ href: '/configuracion/categorias', label: 'Configuracion', icon: 'settings' });
-    }
-    return items;
-  }, [userRole]);
 
   const handleLogout = () => {
     clearToken();
@@ -181,22 +198,25 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     <aside
       className={[
         'fixed left-0 top-0 h-full z-40 bg-slate-50 border-r border-slate-200/15 flex flex-col p-4 space-y-2 font-[\'Inter\'] text-sm font-medium transition-all duration-200',
-        collapsed ? 'w-20' : 'w-64',
+        'w-64',
+        compact ? 'lg:w-20' : 'lg:w-64',
+        mobileOpen ? 'translate-x-0' : '-translate-x-full',
+        'lg:translate-x-0',
       ].join(' ')}
     >
-      <div className={['px-2 mb-8 mt-2 flex items-center', collapsed ? 'justify-center' : ''].join(' ')}>
+      <div className={['px-2 mb-8 mt-2 flex items-center', compact ? 'justify-center' : ''].join(' ')}>
         {bankLogoUrl ? (
           <img
             src={bankLogoUrl}
             alt="Logo del banco"
-            className={collapsed ? 'h-10 w-10 rounded-lg object-cover' : 'h-12 w-full rounded-lg object-contain'}
+            className={compact ? 'h-10 w-10 rounded-lg object-cover' : 'h-12 w-full rounded-lg object-contain'}
             onError={(event) => {
               event.currentTarget.style.display = 'none';
               setBankLogoUrl(null);
             }}
           />
         ) : (
-          <AutoMatixLogo className={collapsed ? 'h-10 w-16' : 'h-12 w-full'} showSubtitle={!collapsed} />
+          <AutoMatixLogo className={compact ? 'h-10 w-16' : 'h-12 w-full'} showSubtitle={!compact} />
         )}
       </div>
 
@@ -208,8 +228,13 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               key={item.label}
               className={linkClassName(active)}
               href={item.href}
-              title={collapsed ? item.label : undefined}
+              title={compact ? item.label : undefined}
               aria-current={active ? 'page' : undefined}
+              onClick={() => {
+                if (mobileOpen) {
+                  onMobileClose();
+                }
+              }}
             >
               <span
                 className="material-symbols-outlined text-[20px]"
@@ -217,7 +242,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               >
                 {item.icon}
               </span>
-              <span className={collapsed ? 'sr-only' : ''}>{item.label}</span>
+              <span className={compact ? 'sr-only' : ''}>{item.label}</span>
             </a>
           );
 
@@ -231,8 +256,8 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               <div>
                 <div className={groupHeaderClassName(superAdminActive)}>
                   <span className="material-symbols-outlined text-[20px]">admin_panel_settings</span>
-                  <span className={collapsed ? 'sr-only' : ''}>SuperAdmin</span>
-                  {!collapsed ? (
+                  <span className={compact ? 'sr-only' : ''}>SuperAdmin</span>
+                  {!compact ? (
                     <span className="material-symbols-outlined text-[16px] ml-auto text-slate-400">expand_more</span>
                   ) : null}
                 </div>
@@ -244,8 +269,13 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                         key={subItem.label}
                         className={subLinkClassName(subActive)}
                         href={subItem.href}
-                        title={collapsed ? subItem.label : undefined}
+                        title={compact ? subItem.label : undefined}
                         aria-current={subActive ? 'page' : undefined}
+                        onClick={() => {
+                          if (mobileOpen) {
+                            onMobileClose();
+                          }
+                        }}
                       >
                         <span
                           className="material-symbols-outlined text-[18px]"
@@ -253,7 +283,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                         >
                           {subItem.icon}
                         </span>
-                        <span className={collapsed ? 'sr-only' : ''}>{subItem.label}</span>
+                        <span className={compact ? 'sr-only' : ''}>{subItem.label}</span>
                       </a>
                     );
                   })}
@@ -265,37 +295,105 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </nav>
 
       <div className="pt-4 border-t border-slate-200/50 space-y-1">
+        {compact ? (
+          <a
+            className={linkClassName(configActive)}
+            href="/configuracion"
+            title="Configuracion"
+            aria-current={configActive ? 'page' : undefined}
+            onClick={() => {
+              if (mobileOpen) {
+                onMobileClose();
+              }
+            }}
+          >
+            <span className="material-symbols-outlined text-[20px]">settings</span>
+            <span className="sr-only">Configuracion</span>
+          </a>
+        ) : (
+          <div className="space-y-1">
+            <button
+              type="button"
+              className={linkClassName(configActive)}
+              onClick={() => setConfigExpanded((prev) => !prev)}
+              aria-expanded={configExpanded}
+            >
+              <span className="material-symbols-outlined text-[20px]">settings</span>
+              <span>Configuracion</span>
+              <span className="material-symbols-outlined text-[16px] ml-auto text-slate-400">
+                {configExpanded ? 'expand_less' : 'expand_more'}
+              </span>
+            </button>
+
+            {configExpanded ? (
+              <div className="space-y-1">
+                {configurationItems.map((item) => {
+                  const active = isActive(item.href);
+                  return (
+                    <a
+                      key={item.href}
+                      className={subLinkClassName(active)}
+                      href={item.href}
+                      aria-current={active ? 'page' : undefined}
+                      onClick={() => {
+                        if (mobileOpen) {
+                          onMobileClose();
+                        }
+                      }}
+                    >
+                      <span
+                        className="material-symbols-outlined text-[18px]"
+                        style={active ? { fontVariationSettings: "'FILL' 1" } : undefined}
+                      >
+                        {item.icon}
+                      </span>
+                      <span>{item.label}</span>
+                    </a>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        )}
+
         {footerItems.map((item) => (
           <a
             key={item.label}
-            className={linkClassName(isActive(item.href))}
+            className={linkClassName(false)}
             href={item.href}
-            title={collapsed ? item.label : undefined}
+            title={compact ? item.label : undefined}
+            onClick={() => {
+              if (mobileOpen) {
+                onMobileClose();
+              }
+            }}
           >
             <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
-            <span className={collapsed ? 'sr-only' : ''}>{item.label}</span>
+            <span className={compact ? 'sr-only' : ''}>{item.label}</span>
           </a>
         ))}
         <button
           className={linkClassName(false)}
           type="button"
           onClick={handleLogout}
-          title={collapsed ? 'Cerrar sesion' : undefined}
+          title={compact ? 'Cerrar sesion' : undefined}
         >
           <span className="material-symbols-outlined text-[20px]">logout</span>
-          <span className={collapsed ? 'sr-only' : ''}>Cerrar sesion</span>
+          <span className={compact ? 'sr-only' : ''}>Cerrar sesion</span>
         </button>
         <button
           className={linkClassName(false)}
           type="button"
           onClick={onToggle}
-          aria-pressed={collapsed}
-          title={collapsed ? 'Expandir menu' : 'Minimizar menu'}
+          aria-pressed={compact}
+          title={mobileOpen ? 'Minimizar menu hacia la izquierda' : compact ? 'Expandir menu' : 'Minimizar menu'}
         >
           <span className="material-symbols-outlined text-[20px]">
-            {collapsed ? 'chevron_right' : 'chevron_left'}
+            {mobileOpen ? 'chevron_left' : compact ? 'chevron_right' : 'chevron_left'}
           </span>
-          <span className={collapsed ? 'sr-only' : ''}>{collapsed ? 'Expandir menu' : 'Minimizar menu'}</span>
+          <span className={compact ? 'sr-only' : ''}>
+            {mobileOpen ? 'Minimizar menu' : compact ? 'Expandir menu' : 'Minimizar menu'}
+          </span>
         </button>
       </div>
     </aside>

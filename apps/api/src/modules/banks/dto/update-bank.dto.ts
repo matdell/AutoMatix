@@ -38,4 +38,8 @@ export class UpdateBankDto {
   @IsOptional()
   @IsString()
   logoUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  timezone?: string;
 }
